@@ -5,38 +5,27 @@ import (
 	"fmt"
 
 	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/format"
-	"github.com/joelanford/orb/internal/ref"
+	"github.com/joelanford/orb/internal/render"
 	"github.com/joelanford/orb/internal/transport"
 )
 
 // Destination writes a bundle to a destination location.
 type Destination interface {
-	Write(ctx context.Context, b *bundle.Bundle) error
+	Write(ctx context.Context, b *bundle.RegistryV1) error
 }
 
-// Options holds authentication and TLS settings for destination transports.
+// Options holds authentication, TLS, and render settings for destination transports.
 type Options struct {
-	Username  string
-	Password  string
-	TLSVerify bool
-	CertDir   string
-	NoCreds   bool
+	Username   string
+	Password   string
+	TLSVerify  bool
+	CertDir    string
+	NoCreds    bool
+	Namespace  string
+	RenderOpts []render.Option
 }
 
-// New creates a Destination for the given parsed reference and options.
-func New(p ref.Parsed, opts Options) (Destination, error) {
-	switch p.Format {
-	case format.Helm:
-		return newHelm(p.Transport, opts)
-	case format.Plain:
-		return newPlain(p.Transport, opts)
-	default:
-		return nil, fmt.Errorf("unsupported destination format: %s", p.Format)
-	}
-}
-
-func newHelm(tr transport.TransportRef, opts Options) (Destination, error) {
+func NewHelm(tr transport.TransportRef, opts Options) (Destination, error) {
 	switch tr.Transport {
 	case transport.Docker:
 		return &helmDocker{ref: tr.Ref, opts: opts}, nil
@@ -51,7 +40,7 @@ func newHelm(tr transport.TransportRef, opts Options) (Destination, error) {
 	}
 }
 
-func newPlain(tr transport.TransportRef, opts Options) (Destination, error) {
+func NewPlain(tr transport.TransportRef, opts Options) (Destination, error) {
 	switch tr.Transport {
 	case transport.Dir:
 		return &plainDir{ref: tr.Ref, opts: opts}, nil

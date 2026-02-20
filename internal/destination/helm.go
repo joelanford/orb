@@ -12,7 +12,7 @@ type helmDocker struct {
 	opts Options
 }
 
-func (d *helmDocker) Write(_ context.Context, _ *bundle.Bundle) error {
+func (d *helmDocker) Write(_ context.Context, _ *bundle.RegistryV1) error {
 	return fmt.Errorf("helm docker destination not yet implemented (ref: %s)", d.ref)
 }
 
@@ -21,7 +21,7 @@ type helmOCI struct {
 	opts Options
 }
 
-func (d *helmOCI) Write(_ context.Context, _ *bundle.Bundle) error {
+func (d *helmOCI) Write(_ context.Context, _ *bundle.RegistryV1) error {
 	return fmt.Errorf("helm oci destination not yet implemented (ref: %s)", d.ref)
 }
 
@@ -30,7 +30,7 @@ type helmOCIArchive struct {
 	opts Options
 }
 
-func (d *helmOCIArchive) Write(_ context.Context, _ *bundle.Bundle) error {
+func (d *helmOCIArchive) Write(_ context.Context, _ *bundle.RegistryV1) error {
 	return fmt.Errorf("helm oci-archive destination not yet implemented (ref: %s)", d.ref)
 }
 
@@ -39,6 +39,6 @@ type helmDir struct {
 	opts Options
 }
 
-func (d *helmDir) Write(_ context.Context, _ *bundle.Bundle) error {
+func (d *helmDir) Write(_ context.Context, _ *bundle.RegistryV1) error {
 	return fmt.Errorf("helm dir destination not yet implemented (ref: %s)", d.ref)
 }

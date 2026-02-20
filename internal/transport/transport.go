@@ -12,6 +12,7 @@ const (
 	OCI
 	OCIArchive
 	Dir
+	Tar
 	Stdout
 )
 
@@ -25,6 +26,8 @@ func (t Transport) String() string {
 		return "oci-archive:"
 	case Dir:
 		return "dir:"
+	case Tar:
+		return "tar:"
 	case Stdout:
 		return "stdout"
 	default:
@@ -46,6 +49,7 @@ var prefixes = []struct {
 	{"docker://", Docker},
 	{"oci-archive:", OCIArchive},
 	{"oci:", OCI},
+	{"tar:", Tar},
 	{"dir:", Dir},
 }
 

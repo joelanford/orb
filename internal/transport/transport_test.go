@@ -6,16 +6,18 @@ import (
 
 func TestParseTransportRef(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		wantTr    Transport
-		wantRef   string
-		wantErr   bool
+		name    string
+		input   string
+		wantTr  Transport
+		wantRef string
+		wantErr bool
 	}{
 		{"docker", "docker://quay.io/my/bundle:v1", Docker, "quay.io/my/bundle:v1", false},
 		{"oci", "oci:/path/to/layout:latest", OCI, "/path/to/layout:latest", false},
 		{"oci-archive", "oci-archive:/path/to/chart.tar", OCIArchive, "/path/to/chart.tar", false},
 		{"dir", "dir:/path/to/bundle", Dir, "/path/to/bundle", false},
+		{"tar", "tar:/path/to/bundle.tar.gz", Tar, "/path/to/bundle.tar.gz", false},
+		{"tar uncompressed", "tar:bundle.tar", Tar, "bundle.tar", false},
 		{"stdout", "stdout", Stdout, "", false},
 		{"unknown", "foo:bar", 0, "", true},
 		{"empty", "", 0, "", true},
@@ -50,6 +52,7 @@ func TestTransportString(t *testing.T) {
 		{OCI, "oci:"},
 		{OCIArchive, "oci-archive:"},
 		{Dir, "dir:"},
+		{Tar, "tar:"},
 		{Stdout, "stdout"},
 	}
 	for _, tt := range tests {

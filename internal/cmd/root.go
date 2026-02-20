@@ -9,7 +9,7 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	cmd.AddCommand(newCopyCmd())
+	cmd.AddCommand(newRenderCmd())
 	return cmd
 }
 

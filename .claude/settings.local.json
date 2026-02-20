@@ -9,7 +9,10 @@
       "Bash(./orb:*)",
       "Bash(echo:*)",
       "Bash(jj describe:*)",
-      "Bash(jj log:*)"
+      "Bash(jj log:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(go vet:*)"
     ]
   }
 }
