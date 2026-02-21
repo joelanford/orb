@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
+	"helm.sh/helm/v4/pkg/chart/common"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/yaml"
 
@@ -13,14 +15,11 @@ import (
 	"github.com/joelanford/orb/internal/convert"
 )
 
-// Generate produces a Helm chart as a map of file paths to file contents
-// from a registry+v1 bundle.
-func Generate(b *bundle.RegistryV1) (map[string][]byte, error) {
+// Generate produces a Helm *chart.Chart from a registry+v1 bundle.
+func Generate(b *bundle.RegistryV1) (*chart.Chart, error) {
 	if err := convert.Converter.BundleValidator.Validate(b); err != nil {
 		return nil, fmt.Errorf("bundle validation failed: %w", err)
 	}
-
-	chartDir := b.PackageName
 
 	hasWebhooks := len(b.CSV.Spec.WebhookDefinitions) > 0
 
@@ -37,27 +36,20 @@ func Generate(b *bundle.RegistryV1) (map[string][]byte, error) {
 		webhookDeployments.Insert(wh.DeploymentName)
 	}
 
-	files := map[string][]byte{}
-
-	// Chart.yaml
-	chartYAML := map[string]interface{}{
-		"apiVersion":  "v2",
-		"name":        b.PackageName,
-		"version":     b.CSV.Spec.Version.String(),
-		"description": cmp.Or(b.CSV.Spec.Description, b.CSV.Spec.DisplayName, b.PackageName),
-		"type":        "application",
+	// Chart metadata
+	md := &chart.Metadata{
+		APIVersion:  chart.APIVersionV2,
+		Name:        b.PackageName,
+		Version:     b.CSV.Spec.Version.String(),
+		Description: cmp.Or(b.CSV.Spec.Description, b.CSV.Spec.DisplayName, b.PackageName),
+		Type:        "application",
 	}
 	if len(b.CSV.Spec.Icon) > 0 && b.CSV.Spec.Icon[0].Data != "" && b.CSV.Spec.Icon[0].MediaType != "" {
 		icon := b.CSV.Spec.Icon[0]
-		chartYAML["icon"] = fmt.Sprintf("data:%s;base64,%s", icon.MediaType, icon.Data)
+		md.Icon = fmt.Sprintf("data:%s;base64,%s", icon.MediaType, icon.Data)
 	}
-	chartData, err := yaml.Marshal(chartYAML)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling Chart.yaml: %w", err)
-	}
-	files[chartDir+"/Chart.yaml"] = chartData
 
-	// values.yaml
+	// Values
 	values := map[string]interface{}{
 		"watchNamespace":   "",
 		"deploymentConfig": map[string]interface{}{},
@@ -65,66 +57,60 @@ func Generate(b *bundle.RegistryV1) (map[string][]byte, error) {
 	if hasWebhooks {
 		values["certProvider"] = "cert-manager"
 	}
-	valuesData, err := yaml.Marshal(values)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling values.yaml: %w", err)
-	}
-	files[chartDir+"/values.yaml"] = valuesData
 
-	// values.schema.json
+	// Schema
 	schemaData, err := generateSchema(b, supportedInstallModes, hasWebhooks)
 	if err != nil {
 		return nil, fmt.Errorf("generating values.schema.json: %w", err)
 	}
-	files[chartDir+"/values.schema.json"] = schemaData
 
-	// _helpers.tpl
-	files[chartDir+"/templates/_helpers.tpl"] = generateHelpers()
+	// Templates
+	var templates []*common.File
 
-	// ServiceAccount templates
+	templates = append(templates, &common.File{
+		Name: "templates/_helpers.tpl",
+		Data: generateHelpers(),
+	})
+
 	saData, err := generateServiceAccounts(b)
 	if err != nil {
 		return nil, fmt.Errorf("generating serviceaccount templates: %w", err)
 	}
 	if len(saData) > 0 {
-		files[chartDir+"/templates/serviceaccount.yaml"] = saData
+		templates = append(templates, &common.File{Name: "templates/serviceaccount.yaml", Data: saData})
 	}
 
-	// RBAC templates
 	rbacData, err := generateRBAC(b)
 	if err != nil {
 		return nil, fmt.Errorf("generating rbac templates: %w", err)
 	}
 	if len(rbacData) > 0 {
-		files[chartDir+"/templates/clusterrole.yaml"] = rbacData
+		templates = append(templates, &common.File{Name: "templates/clusterrole.yaml", Data: rbacData})
 	}
 
-	// Deployment templates
 	depData, err := generateDeployments(b, webhookDeployments)
 	if err != nil {
 		return nil, fmt.Errorf("generating deployment templates: %w", err)
 	}
 	if len(depData) > 0 {
-		files[chartDir+"/templates/deployment.yaml"] = depData
+		templates = append(templates, &common.File{Name: "templates/deployment.yaml", Data: depData})
 	}
 
-	// CRD templates
 	crdData, err := generateCRDs(b)
 	if err != nil {
 		return nil, fmt.Errorf("generating crd templates: %w", err)
 	}
 	if len(crdData) > 0 {
-		files[chartDir+"/templates/crd.yaml"] = crdData
+		templates = append(templates, &common.File{Name: "templates/crd.yaml", Data: crdData})
 	}
 
-	// Webhook + Service templates
 	if hasWebhooks {
 		whData, err := generateWebhooks(b)
 		if err != nil {
 			return nil, fmt.Errorf("generating webhook templates: %w", err)
 		}
 		if len(whData) > 0 {
-			files[chartDir+"/templates/webhook.yaml"] = whData
+			templates = append(templates, &common.File{Name: "templates/webhook.yaml", Data: whData})
 		}
 
 		svcData, err := generateWebhookServices(b)
@@ -132,7 +118,7 @@ func Generate(b *bundle.RegistryV1) (map[string][]byte, error) {
 			return nil, fmt.Errorf("generating service templates: %w", err)
 		}
 		if len(svcData) > 0 {
-			files[chartDir+"/templates/service.yaml"] = svcData
+			templates = append(templates, &common.File{Name: "templates/service.yaml", Data: svcData})
 		}
 
 		certData, err := generateCertProvider(b)
@@ -140,20 +126,24 @@ func Generate(b *bundle.RegistryV1) (map[string][]byte, error) {
 			return nil, fmt.Errorf("generating cert-manager templates: %w", err)
 		}
 		if len(certData) > 0 {
-			files[chartDir+"/templates/cert-manager.yaml"] = certData
+			templates = append(templates, &common.File{Name: "templates/cert-manager.yaml", Data: certData})
 		}
 	}
 
-	// Additional resources
 	addlData, err := generateAdditional(b)
 	if err != nil {
 		return nil, fmt.Errorf("generating additional templates: %w", err)
 	}
 	if len(addlData) > 0 {
-		files[chartDir+"/templates/additional.yaml"] = addlData
+		templates = append(templates, &common.File{Name: "templates/additional.yaml", Data: addlData})
 	}
 
-	return files, nil
+	return &chart.Chart{
+		Metadata:  md,
+		Values:    values,
+		Schema:    schemaData,
+		Templates: templates,
+	}, nil
 }
 
 // certVolumeConfig matches the render package's unexported certVolumeConfig.

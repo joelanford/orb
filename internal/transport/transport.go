@@ -14,6 +14,7 @@ const (
 	Dir
 	Tar
 	Stdout
+	ChartArchive
 )
 
 func (t Transport) String() string {
@@ -30,6 +31,8 @@ func (t Transport) String() string {
 		return "tar:"
 	case Stdout:
 		return "stdout"
+	case ChartArchive:
+		return "chart-archive:"
 	default:
 		return fmt.Sprintf("unknown(%d)", int(t))
 	}
@@ -47,6 +50,7 @@ var prefixes = []struct {
 	transport Transport
 }{
 	{"docker://", Docker},
+	{"chart-archive:", ChartArchive},
 	{"oci-archive:", OCIArchive},
 	{"oci:", OCI},
 	{"tar:", Tar},

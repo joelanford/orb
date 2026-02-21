@@ -1,11 +1,16 @@
 package destination
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
+	bsemver "github.com/blang/semver/v4"
+	opversion "github.com/operator-framework/api/pkg/lib/version"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,6 +32,7 @@ func TestNewHelm(t *testing.T) {
 		{"OCI", transport.OCI, false},
 		{"OCIArchive", transport.OCIArchive, false},
 		{"Dir", transport.Dir, false},
+		{"ChartArchive", transport.ChartArchive, false},
 		{"Unsupported", transport.Stdout, true},
 	}
 
@@ -121,6 +127,72 @@ func TestHelmDir_Write(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestHelmChartArchive_Write_TgzPath(t *testing.T) {
+	dir := t.TempDir()
+	tgzPath := filepath.Join(dir, "my-chart.tgz")
+	b := minimalBundleWithVersion()
+	d := &helmChartArchive{ref: tgzPath}
+
+	err := d.Write(context.Background(), b)
+	require.NoError(t, err)
+
+	// File should exist at the exact path
+	_, err = os.Stat(tgzPath)
+	require.NoError(t, err)
+
+	// Verify it is a valid gzip/tar archive containing chart files
+	assertValidChartArchive(t, tgzPath, b.PackageName)
+}
+
+func TestHelmChartArchive_Write_DirPath(t *testing.T) {
+	dir := t.TempDir()
+	b := minimalBundleWithVersion()
+	d := &helmChartArchive{ref: dir}
+
+	err := d.Write(context.Background(), b)
+	require.NoError(t, err)
+
+	// Save creates <name>-<version>.tgz in the directory
+	matches, err := filepath.Glob(filepath.Join(dir, "*.tgz"))
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+
+	assertValidChartArchive(t, matches[0], b.PackageName)
+}
+
+func assertValidChartArchive(t *testing.T, path, chartName string) {
+	t.Helper()
+	f, err := os.Open(path)
+	require.NoError(t, err)
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	require.NoError(t, err)
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	var names []string
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		names = append(names, hdr.Name)
+	}
+
+	assert.NotEmpty(t, names)
+	// Chart.yaml must be present under the chart name directory
+	var foundChart bool
+	for _, n := range names {
+		if n == chartName+"/Chart.yaml" {
+			foundChart = true
+			break
+		}
+	}
+	assert.True(t, foundChart, "expected %s/Chart.yaml in archive, got: %v", chartName, names)
+}
+
 // minimalBundle creates a minimal valid bundle.RegistryV1 that passes validation.
 func minimalBundle() *bundle.RegistryV1 {
 	return &bundle.RegistryV1{
@@ -164,4 +236,11 @@ func minimalBundle() *bundle.RegistryV1 {
 			},
 		},
 	}
+}
+
+// minimalBundleWithVersion returns a bundle with a proper semver version for chart archive tests.
+func minimalBundleWithVersion() *bundle.RegistryV1 {
+	b := minimalBundle()
+	b.CSV.Spec.Version = opversion.OperatorVersion{Version: bsemver.MustParse("0.1.0")}
+	return b
 }

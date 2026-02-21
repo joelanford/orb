@@ -18,6 +18,7 @@ func TestParseRef(t *testing.T) {
 		{"dir", "dir:/path/to/bundle", Dir, "/path/to/bundle", false},
 		{"tar", "tar:/path/to/bundle.tar.gz", Tar, "/path/to/bundle.tar.gz", false},
 		{"tar uncompressed", "tar:bundle.tar", Tar, "bundle.tar", false},
+		{"chart-archive", "chart-archive:/tmp/chart.tgz", ChartArchive, "/tmp/chart.tgz", false},
 		{"stdout", "stdout", Stdout, "", false},
 		{"unknown", "foo:bar", 0, "", true},
 		{"empty", "", 0, "", true},
@@ -54,6 +55,7 @@ func TestTransportString(t *testing.T) {
 		{Dir, "dir:"},
 		{Tar, "tar:"},
 		{Stdout, "stdout"},
+		{ChartArchive, "chart-archive:"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {

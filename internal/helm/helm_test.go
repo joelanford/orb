@@ -10,6 +10,7 @@ import (
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -81,31 +82,32 @@ func semverVersion(v string) opversion.OperatorVersion {
 
 func TestGenerate_MinimalBundle(t *testing.T) {
 	b := makeMinimalBundle()
-	files, err := Generate(b)
+	c, err := Generate(b)
 	require.NoError(t, err)
 
-	chartDir := b.PackageName
+	// Metadata
+	assert.Equal(t, "test-operator", c.Metadata.Name)
+	assert.Equal(t, "v2", c.Metadata.APIVersion)
+	assert.Equal(t, "1.0.0", c.Metadata.Version)
+	assert.Equal(t, "application", c.Metadata.Type)
 
-	// Required files exist
-	assert.Contains(t, files, chartDir+"/Chart.yaml")
-	assert.Contains(t, files, chartDir+"/values.yaml")
-	assert.Contains(t, files, chartDir+"/values.schema.json")
-	assert.Contains(t, files, chartDir+"/templates/_helpers.tpl")
-	assert.Contains(t, files, chartDir+"/templates/deployment.yaml")
+	// Values
+	assert.NotNil(t, c.Values)
+	assert.Contains(t, c.Values, "watchNamespace")
+	assert.NotContains(t, c.Values, "certProvider")
+
+	// Schema
+	assert.NotEmpty(t, c.Schema)
+
+	// Required templates exist
+	templateNames := chartTemplateNames(c)
+	assert.Contains(t, templateNames, "templates/_helpers.tpl")
+	assert.Contains(t, templateNames, "templates/deployment.yaml")
 
 	// No webhook/service/cert-manager templates
-	assert.NotContains(t, files, chartDir+"/templates/webhook.yaml")
-	assert.NotContains(t, files, chartDir+"/templates/service.yaml")
-	assert.NotContains(t, files, chartDir+"/templates/cert-manager.yaml")
-
-	// Chart.yaml content
-	chartYAML := string(files[chartDir+"/Chart.yaml"])
-	assert.Contains(t, chartYAML, "name: test-operator")
-	assert.Contains(t, chartYAML, "apiVersion: v2")
-
-	// values.yaml should not contain certProvider
-	valuesYAML := string(files[chartDir+"/values.yaml"])
-	assert.NotContains(t, valuesYAML, "certProvider")
+	assert.NotContains(t, templateNames, "templates/webhook.yaml")
+	assert.NotContains(t, templateNames, "templates/service.yaml")
+	assert.NotContains(t, templateNames, "templates/cert-manager.yaml")
 }
 
 func TestGenerate_WithCRDs(t *testing.T) {
@@ -130,9 +132,9 @@ func TestGenerate_WithCRDs(t *testing.T) {
 			{Name: "tests.example.com", Version: "v1", Kind: "Test"},
 		}
 	})
-	files, err := Generate(b)
+	c, err := Generate(b)
 	require.NoError(t, err)
-	assert.Contains(t, files, b.PackageName+"/templates/crd.yaml")
+	assert.Contains(t, chartTemplateNames(c), "templates/crd.yaml")
 }
 
 func TestGenerate_WithWebhooks(t *testing.T) {
@@ -165,17 +167,16 @@ func TestGenerate_WithWebhooks(t *testing.T) {
 		}
 	})
 
-	files, err := Generate(b)
+	c, err := Generate(b)
 	require.NoError(t, err)
 
-	chartDir := b.PackageName
-	assert.Contains(t, files, chartDir+"/templates/webhook.yaml")
-	assert.Contains(t, files, chartDir+"/templates/service.yaml")
-	assert.Contains(t, files, chartDir+"/templates/cert-manager.yaml")
+	templateNames := chartTemplateNames(c)
+	assert.Contains(t, templateNames, "templates/webhook.yaml")
+	assert.Contains(t, templateNames, "templates/service.yaml")
+	assert.Contains(t, templateNames, "templates/cert-manager.yaml")
 
-	// values.yaml should contain certProvider
-	valuesYAML := string(files[chartDir+"/values.yaml"])
-	assert.Contains(t, valuesYAML, "certProvider")
+	// Values should contain certProvider
+	assert.Contains(t, c.Values, "certProvider")
 }
 
 func TestGenerate_WithConversionWebhook(t *testing.T) {
@@ -218,10 +219,10 @@ func TestGenerate_WithConversionWebhook(t *testing.T) {
 		}
 	})
 
-	files, err := Generate(b)
+	c, err := Generate(b)
 	require.NoError(t, err)
 
-	crdYAML := string(files[b.PackageName+"/templates/crd.yaml"])
+	crdYAML := string(chartTemplateData(c, "templates/crd.yaml"))
 	assert.Contains(t, crdYAML, "cert-manager")
 	assert.Contains(t, crdYAML, "certProvider")
 }
@@ -245,9 +246,9 @@ func TestGenerate_WithAdditionalResources(t *testing.T) {
 		}
 	})
 
-	files, err := Generate(b)
+	c, err := Generate(b)
 	require.NoError(t, err)
-	assert.Contains(t, files, b.PackageName+"/templates/additional.yaml")
+	assert.Contains(t, chartTemplateNames(c), "templates/additional.yaml")
 }
 
 func TestGenerate_WithPermissions(t *testing.T) {
@@ -262,9 +263,9 @@ func TestGenerate_WithPermissions(t *testing.T) {
 		}
 	})
 
-	files, err := Generate(b)
+	c, err := Generate(b)
 	require.NoError(t, err)
-	assert.Contains(t, files, b.PackageName+"/templates/clusterrole.yaml")
+	assert.Contains(t, chartTemplateNames(c), "templates/clusterrole.yaml")
 }
 
 func TestGenerate_ValidationFailure(t *testing.T) {
@@ -275,6 +276,25 @@ func TestGenerate_ValidationFailure(t *testing.T) {
 	_, err := Generate(b)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bundle validation failed")
+}
+
+// chartTemplateNames returns template names from a chart.
+func chartTemplateNames(c *chart.Chart) []string {
+	var names []string
+	for _, t := range c.Templates {
+		names = append(names, t.Name)
+	}
+	return names
+}
+
+// chartTemplateData returns template data for a given name, or nil if not found.
+func chartTemplateData(c *chart.Chart, name string) []byte {
+	for _, t := range c.Templates {
+		if t.Name == name {
+			return t.Data
+		}
+	}
+	return nil
 }
 
 // ---- Tests for sub-generators ----

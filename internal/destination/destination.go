@@ -35,6 +35,8 @@ func NewHelm(tr transport.Ref, opts Options) (Destination, error) {
 		return &helmOCIArchive{ref: tr.Ref, opts: opts}, nil
 	case transport.Dir:
 		return &helmDir{ref: tr.Ref, opts: opts}, nil
+	case transport.ChartArchive:
+		return &helmChartArchive{ref: tr.Ref, opts: opts}, nil
 	default:
 		return nil, fmt.Errorf("unsupported helm transport: %s", tr.Transport)
 	}

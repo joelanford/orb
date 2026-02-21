@@ -51,12 +51,13 @@ func newBundleConvertCmd() *cobra.Command {
 The source argument is a skopeo-style transport:ref string (regv1 format is implicit).
 
 Supported transports:
-  docker://     Container registry
-  oci:          OCI image layout directory
-  oci-archive:  OCI image layout archive
-  dir:          Local directory
-  tar:          Tar archive (compressed or uncompressed, source only)
-  stdout        Standard output (plain format only)
+  docker://       Container registry
+  oci:            OCI image layout directory
+  oci-archive:    OCI image layout archive
+  dir:            Local directory
+  tar:            Tar archive (compressed or uncompressed, source only)
+  chart-archive:  Helm chart archive (.tgz, helm destination only)
+  stdout          Standard output (plain format only)
 
 Use a subcommand to choose the destination format:
   plain   Plain manifests
@@ -127,8 +128,7 @@ DESTINATION is a transport:ref string for the output location.
 
 Examples:
   orb bundle convert helm docker://quay.io/my/bundle:v1 dir:/tmp/chart
-  orb bundle convert helm docker://quay.io/my/bundle:v1 docker://quay.io/my/chart:v1
-  orb bundle convert helm oci:/path/to/layout:latest oci-archive:/tmp/chart.tar`,
+  orb bundle convert helm docker://quay.io/my/bundle:v1 chart-archive:/tmp/chart.tgz`,
 		Args: cobra.ExactArgs(2),
 		RunE: runConvertHelm,
 	}

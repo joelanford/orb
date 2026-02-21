@@ -84,6 +84,7 @@ orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators --cert-provi
 
 ```sh
 orb bundle convert helm docker://quay.io/my/bundle:v1 dir:/tmp/chart
+orb bundle convert helm docker://quay.io/my/bundle:v1 chart-archive:/tmp/chart.tgz
 ```
 
 The generated Helm chart supports install-time configuration via values:
@@ -128,7 +129,9 @@ helm template my-release /tmp/chart --namespace operators \
 
 ### Supported transports
 
-Sources and destinations use skopeo-style transport prefixes:
+Sources and destinations use skopeo-style transport prefixes.
+
+#### Source (registry+v1 bundle)
 
 | Transport | Description |
 |-----------|-------------|
@@ -136,8 +139,21 @@ Sources and destinations use skopeo-style transport prefixes:
 | `oci:` | OCI image layout directory |
 | `oci-archive:` | OCI image layout archive |
 | `dir:` | Local directory |
-| `tar:` | Tar archive (source only) |
-| `stdout` | Standard output (plain format only) |
+| `tar:` | Tar archive (compressed or uncompressed) |
+
+#### Destination: plain
+
+| Transport | Description |
+|-----------|-------------|
+| `dir:` | Local directory |
+| `stdout` | Standard output (default) |
+
+#### Destination: helm
+
+| Transport | Description |
+|-----------|-------------|
+| `dir:` | Local directory (chart as files) |
+| `chart-archive:` | Helm chart archive (`.tgz`) |
 
 ## License
 
