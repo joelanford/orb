@@ -15,8 +15,8 @@ orb catalog add operatorhubio docker://quay.io/operatorhubio/catalog:latest
 # 2. Resolve the latest bundle for a package
 orb catalog resolve vault
 
-# 3. Render and apply in one shot
-orb render plain \
+# 3. Convert and apply in one shot
+orb bundle convert plain \
   "$(orb catalog resolve vault -o jsonpath='{.items[0].image}')" \
   -n operators | kubectl apply -f -
 ```
@@ -72,18 +72,18 @@ orb catalog resolve vault -o yaml
 orb catalog resolve vault -o jsonpath='{.items[0].image}'
 ```
 
-### Render to plain manifests
+### Convert to plain manifests
 
 ```sh
-orb render plain docker://quay.io/my/bundle:v1 -n operators
-orb render plain docker://quay.io/my/bundle:v1 dir:/tmp/output -n operators
-orb render plain docker://quay.io/my/bundle:v1 -n operators --cert-provider cert-manager
+orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators
+orb bundle convert plain docker://quay.io/my/bundle:v1 dir:/tmp/output -n operators
+orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators --cert-provider cert-manager
 ```
 
-### Render to Helm chart
+### Convert to Helm chart
 
 ```sh
-orb render helm docker://quay.io/my/bundle:v1 dir:/tmp/chart
+orb bundle convert helm docker://quay.io/my/bundle:v1 dir:/tmp/chart
 ```
 
 The generated Helm chart supports install-time configuration via values:

@@ -43,13 +43,22 @@ type plainOptions struct {
 	certProvider string
 }
 
-func newRenderCmd() *cobra.Command {
+func newBundleCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "bundle",
+		Short: "Work with operator bundles",
+	}
+	cmd.AddCommand(newBundleConvertCmd())
+	return cmd
+}
+
+func newBundleConvertCmd() *cobra.Command {
 	opts := &renderOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "render",
-		Short: "Render a bundle from source to destination",
-		Long: `Render a bundle from source to destination, converting between formats.
+		Use:   "convert",
+		Short: "Convert a bundle from source to destination format",
+		Long: `Convert a bundle from source to destination, changing between formats.
 
 The source argument is a skopeo-style transport:ref string (regv1 format is implicit).
 
@@ -87,19 +96,19 @@ Use a subcommand to choose the destination format:
 
 	pflags.BoolVarP(&opts.quiet, "quiet", "q", false, "Suppress output")
 
-	cmd.AddCommand(newRenderPlainCmd(opts))
-	cmd.AddCommand(newRenderHelmCmd(opts))
+	cmd.AddCommand(newConvertPlainCmd(opts))
+	cmd.AddCommand(newConvertHelmCmd(opts))
 
 	return cmd
 }
 
-func newRenderPlainCmd(renderOpts *renderOptions) *cobra.Command {
+func newConvertPlainCmd(renderOpts *renderOptions) *cobra.Command {
 	plainOpts := &plainOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "plain SOURCE [DESTINATION]",
-		Short: "Render a bundle as plain manifests",
-		Long: `Render a bundle as plain Kubernetes manifests.
+		Short: "Convert a bundle to plain manifests",
+		Long: `Convert a bundle to plain Kubernetes manifests.
 
 SOURCE is a skopeo-style transport:ref string (regv1 format is implicit).
 DESTINATION defaults to stdout if not specified. Supported destination transports
@@ -110,12 +119,12 @@ Certificate providers (--cert-provider):
   service-ca    Use OpenShift Service CA Operator
 
 Examples:
-  orb render plain docker://quay.io/my/bundle:v1 -n operators
-  orb render plain dir:/path/to/bundle -n operators
-  orb render plain tar:bundle.tar.gz -n operators
-  orb render plain oci:/path/to/layout:latest dir:/tmp/output -n operators
-  orb render plain docker://quay.io/my/bundle:v1 -n operators --cert-provider cert-manager
-  orb render plain docker://quay.io/my/bundle:v1 -n operators -c config.yaml`,
+  orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators
+  orb bundle convert plain dir:/path/to/bundle -n operators
+  orb bundle convert plain tar:bundle.tar.gz -n operators
+  orb bundle convert plain oci:/path/to/layout:latest dir:/tmp/output -n operators
+  orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators --cert-provider cert-manager
+  orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators -c config.yaml`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRenderPlain(cmd, args, renderOpts, plainOpts)
@@ -132,19 +141,19 @@ Examples:
 	return cmd
 }
 
-func newRenderHelmCmd(renderOpts *renderOptions) *cobra.Command {
+func newConvertHelmCmd(renderOpts *renderOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "helm SOURCE DESTINATION",
-		Short: "Render a bundle as a Helm chart",
-		Long: `Render a bundle as a Helm chart.
+		Short: "Convert a bundle to a Helm chart",
+		Long: `Convert a bundle to a Helm chart.
 
 SOURCE is a skopeo-style transport:ref string (regv1 format is implicit).
 DESTINATION is a transport:ref string for the output location.
 
 Examples:
-  orb render helm docker://quay.io/my/bundle:v1 dir:/tmp/chart
-  orb render helm docker://quay.io/my/bundle:v1 docker://quay.io/my/chart:v1
-  orb render helm oci:/path/to/layout:latest oci-archive:/tmp/chart.tar`,
+  orb bundle convert helm docker://quay.io/my/bundle:v1 dir:/tmp/chart
+  orb bundle convert helm docker://quay.io/my/bundle:v1 docker://quay.io/my/chart:v1
+  orb bundle convert helm oci:/path/to/layout:latest oci-archive:/tmp/chart.tar`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRenderHelm(cmd, args, renderOpts)
