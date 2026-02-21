@@ -25,8 +25,9 @@ func generateSchema(b *bundle.RegistryV1, supportedModes sets.Set[v1alpha1.Insta
 	if hasWebhooks {
 		properties["certProvider"] = map[string]interface{}{
 			"type": "string",
-			"enum": []string{"", "cert-manager", "service-ca"},
+			"enum": []string{"cert-manager", "service-ca"},
 		}
+		required = append(required, "certProvider")
 	}
 
 	schema := map[string]interface{}{

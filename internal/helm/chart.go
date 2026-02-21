@@ -63,7 +63,7 @@ func Generate(b *bundle.RegistryV1) (map[string][]byte, error) {
 		"deploymentConfig": map[string]interface{}{},
 	}
 	if hasWebhooks {
-		values["certProvider"] = ""
+		values["certProvider"] = "cert-manager"
 	}
 	valuesData, err := yaml.Marshal(values)
 	if err != nil {
