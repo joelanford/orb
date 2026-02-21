@@ -722,8 +722,8 @@ func TestEscapeHelm(t *testing.T) {
 		want  string
 	}{
 		{"NoEscape", "hello world", "hello world"},
-		{"EscapeBraces", "value: {{something}}", `value: {{ "{{" }}something}}`},
-		{"MultipleBraces", "a: {{b}} c: {{d}}", `a: {{ "{{" }}b}} c: {{ "{{" }}d}}`},
+		{"EscapeBraces", "value: {{something}}", "value: {{ `{{` }}something}}"},
+		{"MultipleBraces", "a: {{b}} c: {{d}}", "a: {{ `{{` }}b}} c: {{ `{{` }}d}}"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -819,7 +819,7 @@ func TestEscapeHelmExceptDirectives(t *testing.T) {
 	t.Run("EscapesLiteralBraces", func(t *testing.T) {
 		input := "annotation: {{some-literal}}"
 		result := escapeHelmExceptDirectives(input)
-		assert.Contains(t, result, `{{ "{{" }}`)
+		assert.Contains(t, result, "{{ `{{` }}")
 	})
 }
 

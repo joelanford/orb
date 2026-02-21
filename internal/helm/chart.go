@@ -50,12 +50,9 @@ func Generate(b *bundle.RegistryV1) (*chart.Chart, error) {
 	}
 
 	// Values
-	values := map[string]interface{}{
-		"watchNamespace":   "",
-		"deploymentConfig": map[string]interface{}{},
-	}
-	if hasWebhooks {
-		values["certProvider"] = "cert-manager"
+	valuesRaw, values, err := generateValues(hasWebhooks)
+	if err != nil {
+		return nil, fmt.Errorf("generating values.yaml: %w", err)
 	}
 
 	// Schema
@@ -140,6 +137,7 @@ func Generate(b *bundle.RegistryV1) (*chart.Chart, error) {
 
 	return &chart.Chart{
 		Metadata:  md,
+		Raw:       []*common.File{{Name: "values.yaml", Data: valuesRaw}},
 		Values:    values,
 		Schema:    schemaData,
 		Templates: templates,
@@ -170,8 +168,13 @@ var certVolumeConfigList = []certVolumeConfig{
 }
 
 // escapeHelm escapes {{ in strings so Helm doesn't interpret them.
+// It uses backtick-quoted raw strings ({{ `{{` }}) rather than double-quoted
+// strings ({{ "{{" }}) because the latter breaks when the value ends up inside
+// a YAML double-quoted string — YAML escaping turns " into \", producing
+// {{ \"{{\" }} which is invalid Go template syntax. Backticks are not special
+// in YAML, so they survive any YAML quoting context unchanged.
 func escapeHelm(s string) string {
-	return strings.ReplaceAll(s, "{{", `{{ "{{" }}`)
+	return strings.ReplaceAll(s, "{{", "{{ `{{` }}")
 }
 
 // toYAMLIndent marshals obj to YAML and indents each line by the given number of spaces.
