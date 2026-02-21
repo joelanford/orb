@@ -1,19 +1,22 @@
 package catalog
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // Catalog represents a single catalog entry in the config file.
 type Catalog struct {
-	Name       string `json:"name"`
-	Ref        string `json:"ref"`
-	ContentDir string `json:"contentDir"`
-	Priority   int    `json:"priority"`
+	Name       string            `json:"name"`
+	Ref        string            `json:"ref"`
+	ContentDir string            `json:"contentDir"`
+	Priority   int               `json:"priority"`
+	Labels     map[string]string `json:"labels,omitempty"`
 }
 
 // Config holds the list of configured catalogs.
@@ -105,4 +108,17 @@ func (c *Config) Get(name string) (*Catalog, bool) {
 		}
 	}
 	return nil, false
+}
+
+// SortedCatalogs returns a copy of the catalogs sorted by priority descending,
+// then by name ascending.
+func (c *Config) SortedCatalogs() []Catalog {
+	sorted := slices.Clone(c.Catalogs)
+	slices.SortFunc(sorted, func(a, b Catalog) int {
+		if c := cmp.Compare(b.Priority, a.Priority); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Name, b.Name)
+	})
+	return sorted
 }
