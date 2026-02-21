@@ -1,16 +1,6 @@
 # orb
 
-A packaging transpiler for Kubernetes package formats.
-
-orb converts between Kubernetes packaging formats, including:
-
-- **OLM registry+v1 bundles**
-- **Helm charts**
-- **Plain manifests**
-
-## Overview
-
-orb reads a source package in one format and produces an equivalent package in another format, enabling interoperability across the Kubernetes packaging ecosystem.
+orb puts OLM's building blocks in your hands — resolve, render, and inspect operator bundles and catalogs, all client-side.
 
 ## Usage
 
@@ -33,7 +23,7 @@ The generated Helm chart supports install-time configuration via values:
 | Value | Description | Default |
 |-------|-------------|---------|
 | `watchNamespace` | Namespace to watch. `""` = AllNamespaces; set to a namespace for OwnNamespace/SingleNamespace. | `""` |
-| `certProvider` | Certificate provider for webhooks: `""`, `"cert-manager"`, or `"service-ca"`. Only present if the bundle has webhooks. | `""` |
+| `certProvider` | Certificate provider for webhooks: `"cert-manager"` or `"service-ca"`. Required when the bundle has webhooks. | `"cert-manager"` |
 | `deploymentConfig` | Deployment overrides following OLM `subscription.spec.config` semantics. | `{}` |
 
 #### deploymentConfig fields
@@ -53,14 +43,14 @@ The generated Helm chart supports install-time configuration via values:
 #### Examples
 
 ```sh
-# Render with default values (AllNamespaces mode, no cert provider)
+# Render with default values (AllNamespaces mode)
 helm template my-release /tmp/chart --namespace operators
 
 # Watch a single namespace
 helm template my-release /tmp/chart --namespace operators --set watchNamespace=monitoring
 
-# Enable cert-manager for webhook certificates
-helm template my-release /tmp/chart --namespace operators --set certProvider=cert-manager
+# Use service-ca instead of cert-manager for webhook certificates
+helm template my-release /tmp/chart --namespace operators --set certProvider=service-ca
 
 # Override deployment resources
 helm template my-release /tmp/chart --namespace operators \
