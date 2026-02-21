@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/render"
+	"github.com/joelanford/orb/internal/convert"
 )
 
 type plainDir struct {
@@ -22,7 +22,7 @@ type plainDir struct {
 }
 
 func (d *plainDir) Write(_ context.Context, b *bundle.RegistryV1) error {
-	objs, err := render.Renderer.Render(*b, d.opts.Namespace, d.opts.RenderOpts...)
+	objs, err := convert.Converter.Convert(*b, d.opts.Namespace, d.opts.ConvertOpts...)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ type plainStdout struct {
 }
 
 func (d *plainStdout) Write(_ context.Context, b *bundle.RegistryV1) error {
-	objs, err := render.Renderer.Render(*b, d.opts.Namespace, d.opts.RenderOpts...)
+	objs, err := convert.Converter.Convert(*b, d.opts.Namespace, d.opts.ConvertOpts...)
 	if err != nil {
 		return err
 	}

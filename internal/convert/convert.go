@@ -1,4 +1,4 @@
-package render
+package convert
 
 import (
 	"errors"
@@ -105,12 +105,12 @@ func WithCertificateProvider(provider CertificateProvider) Option {
 	}
 }
 
-type BundleRenderer struct {
+type BundleConverter struct {
 	BundleValidator    BundleValidator
 	ResourceGenerators []ResourceGenerator
 }
 
-func (r BundleRenderer) Render(rv1 bundle.RegistryV1, installNamespace string, opts ...Option) ([]client.Object, error) {
+func (r BundleConverter) Convert(rv1 bundle.RegistryV1, installNamespace string, opts ...Option) ([]client.Object, error) {
 	// validate bundle
 	if err := r.BundleValidator.Validate(&rv1); err != nil {
 		return nil, err

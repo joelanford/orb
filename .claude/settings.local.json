@@ -13,7 +13,11 @@
       "Bash(grep:*)",
       "Bash(ls:*)",
       "Bash(go vet:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(head:*)",
+      "Bash(go doc:*)",
+      "Bash(jj status:*)",
+      "Bash(jj diff:*)"
     ]
   }
 }

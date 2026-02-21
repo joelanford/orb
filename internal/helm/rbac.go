@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/render"
+	"github.com/joelanford/orb/internal/convert"
 )
 
 func generateRBAC(b *bundle.RegistryV1) ([]byte, error) {
@@ -18,7 +18,7 @@ func generateRBAC(b *bundle.RegistryV1) ([]byte, error) {
 	// 1. ClusterPermissions — always ClusterRole/ClusterRoleBinding (unconditional)
 	for _, perm := range b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions {
 		saName := saNameOrDefault(perm.ServiceAccountName)
-		name := render.DefaultUniqueNameGenerator(fmt.Sprintf("%s-%s", b.CSV.Name, saName), perm)
+		name := convert.DefaultUniqueNameGenerator(fmt.Sprintf("%s-%s", b.CSV.Name, saName), perm)
 
 		if !first {
 			sb.WriteString("---\n")
@@ -75,7 +75,7 @@ subjects:
 				Resources: []string{"namespaces"},
 			})
 
-			name := render.DefaultUniqueNameGenerator(fmt.Sprintf("%s-%s", b.CSV.Name, saName), *allNSPerm)
+			name := convert.DefaultUniqueNameGenerator(fmt.Sprintf("%s-%s", b.CSV.Name, saName), *allNSPerm)
 
 			if !firstInBlock {
 				sb.WriteString("---\n")
@@ -116,7 +116,7 @@ subjects:
 		firstInBlock = true
 		for _, perm := range b.CSV.Spec.InstallStrategy.StrategySpec.Permissions {
 			saName := saNameOrDefault(perm.ServiceAccountName)
-			name := render.DefaultUniqueNameGenerator(fmt.Sprintf("%s-%s", b.CSV.Name, saName), perm)
+			name := convert.DefaultUniqueNameGenerator(fmt.Sprintf("%s-%s", b.CSV.Name, saName), perm)
 
 			if !firstInBlock {
 				sb.WriteString("---\n")

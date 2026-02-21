@@ -12,7 +12,7 @@ import (
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 
 	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/render"
+	"github.com/joelanford/orb/internal/convert"
 )
 
 func generateDeployments(b *bundle.RegistryV1, webhookDeployments sets.Set[string]) ([]byte, error) {
@@ -104,7 +104,7 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 	}
 
 	// Pod template annotations — merge CSV annotations + template annotations + olm.targetNamespaces
-	mergedAnnotations := render.MergeMaps(b.CSV.Annotations, depSpec.Spec.Template.Annotations)
+	mergedAnnotations := convert.MergeMaps(b.CSV.Annotations, depSpec.Spec.Template.Annotations)
 	sb.WriteString("      annotations:\n")
 	baseAnnoKeys := make([]string, 0, len(mergedAnnotations))
 	for k, v := range mergedAnnotations {

@@ -1,7 +1,7 @@
-package render
+package convert
 
-// Renderer renders registry+v1 bundles into plain kubernetes manifests
-var Renderer = BundleRenderer{
+// Converter converts registry+v1 bundles into plain kubernetes manifests
+var Converter = BundleConverter{
 	BundleValidator:    bundleValidator,
 	ResourceGenerators: resourceGenerators,
 }

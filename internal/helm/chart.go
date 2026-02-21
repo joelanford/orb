@@ -10,13 +10,13 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/render"
+	"github.com/joelanford/orb/internal/convert"
 )
 
 // Generate produces a Helm chart as a map of file paths to file contents
 // from a registry+v1 bundle.
 func Generate(b *bundle.RegistryV1) (map[string][]byte, error) {
-	if err := render.Renderer.BundleValidator.Validate(b); err != nil {
+	if err := convert.Converter.BundleValidator.Validate(b); err != nil {
 		return nil, fmt.Errorf("bundle validation failed: %w", err)
 	}
 
@@ -217,13 +217,13 @@ func escapeYAMLString(s string) string {
 // certNameForDeployment returns the cert secret name for a given deployment name,
 // using the same logic as the render package.
 func certNameForDeployment(depName string) string {
-	webhookServiceName := render.ObjectNameForBaseAndSuffix(strings.ReplaceAll(depName, ".", "-"), "service")
-	return render.ObjectNameForBaseAndSuffix(webhookServiceName, "cert")
+	webhookServiceName := convert.ObjectNameForBaseAndSuffix(strings.ReplaceAll(depName, ".", "-"), "service")
+	return convert.ObjectNameForBaseAndSuffix(webhookServiceName, "cert")
 }
 
 // serviceNameForDeployment returns the webhook service name for a given deployment name.
 func serviceNameForDeployment(depName string) string {
-	return render.ObjectNameForBaseAndSuffix(strings.ReplaceAll(depName, ".", "-"), "service")
+	return convert.ObjectNameForBaseAndSuffix(strings.ReplaceAll(depName, ".", "-"), "service")
 }
 
 // saNameOrDefault returns "default" when saName is empty.

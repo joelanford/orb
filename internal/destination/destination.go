@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/render"
+	"github.com/joelanford/orb/internal/convert"
 	"github.com/joelanford/orb/internal/transport"
 )
 
@@ -22,7 +22,7 @@ type Options struct {
 	CertDir    string
 	NoCreds    bool
 	Namespace  string
-	RenderOpts []render.Option
+	ConvertOpts []convert.Option
 }
 
 func NewHelm(tr transport.TransportRef, opts Options) (Destination, error) {

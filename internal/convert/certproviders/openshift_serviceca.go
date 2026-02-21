@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/joelanford/orb/internal/render"
+	"github.com/joelanford/orb/internal/convert"
 )
 
 const (
@@ -15,11 +15,11 @@ const (
 	openshiftServiceCAInjectCABundleAnnotation  = "service.beta.openshift.io/inject-cabundle"
 )
 
-var _ render.CertificateProvider = (*OpenshiftServiceCaCertificateProvider)(nil)
+var _ convert.CertificateProvider = (*OpenshiftServiceCaCertificateProvider)(nil)
 
 type OpenshiftServiceCaCertificateProvider struct{}
 
-func (p OpenshiftServiceCaCertificateProvider) InjectCABundle(obj client.Object, cfg render.CertificateProvisionerConfig) error {
+func (p OpenshiftServiceCaCertificateProvider) InjectCABundle(obj client.Object, cfg convert.CertificateProvisionerConfig) error {
 	switch obj.(type) {
 	case *admissionregistrationv1.ValidatingWebhookConfiguration:
 		p.addInjectCABundleAnnotation(obj)
@@ -33,12 +33,12 @@ func (p OpenshiftServiceCaCertificateProvider) InjectCABundle(obj client.Object,
 	return nil
 }
 
-func (p OpenshiftServiceCaCertificateProvider) AdditionalObjects(_ render.CertificateProvisionerConfig) ([]unstructured.Unstructured, error) {
+func (p OpenshiftServiceCaCertificateProvider) AdditionalObjects(_ convert.CertificateProvisionerConfig) ([]unstructured.Unstructured, error) {
 	return nil, nil
 }
 
-func (p OpenshiftServiceCaCertificateProvider) GetCertSecretInfo(cfg render.CertificateProvisionerConfig) render.CertSecretInfo {
-	return render.CertSecretInfo{
+func (p OpenshiftServiceCaCertificateProvider) GetCertSecretInfo(cfg convert.CertificateProvisionerConfig) convert.CertSecretInfo {
+	return convert.CertSecretInfo{
 		SecretName:     cfg.CertName,
 		PrivateKeyKey:  "tls.key",
 		CertificateKey: "tls.crt",
@@ -49,12 +49,12 @@ func (p OpenshiftServiceCaCertificateProvider) addServingCertSecretNameAnnotatio
 	injectionAnnotation := map[string]string{
 		openshiftServiceCAServingCertNameAnnotation: certName,
 	}
-	obj.SetAnnotations(render.MergeMaps(obj.GetAnnotations(), injectionAnnotation))
+	obj.SetAnnotations(convert.MergeMaps(obj.GetAnnotations(), injectionAnnotation))
 }
 
 func (p OpenshiftServiceCaCertificateProvider) addInjectCABundleAnnotation(obj client.Object) {
 	injectionAnnotation := map[string]string{
 		openshiftServiceCAInjectCABundleAnnotation: "true",
 	}
-	obj.SetAnnotations(render.MergeMaps(obj.GetAnnotations(), injectionAnnotation))
+	obj.SetAnnotations(convert.MergeMaps(obj.GetAnnotations(), injectionAnnotation))
 }

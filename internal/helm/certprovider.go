@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/render"
+	"github.com/joelanford/orb/internal/convert"
 )
 
 func generateCertProvider(b *bundle.RegistryV1) ([]byte, error) {
@@ -27,7 +27,7 @@ func generateCertProvider(b *bundle.RegistryV1) ([]byte, error) {
 	for _, depName := range webhookDeployments.UnsortedList() {
 		svcName := serviceNameForDeployment(depName)
 		certName := certNameForDeployment(depName)
-		issuerName := render.ObjectNameForBaseAndSuffix(certName, "selfsigned-issuer")
+		issuerName := convert.ObjectNameForBaseAndSuffix(certName, "selfsigned-issuer")
 
 		if !first {
 			sb.WriteString("---\n")

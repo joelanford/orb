@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/joelanford/orb/internal/render"
+	"github.com/joelanford/orb/internal/convert"
 )
 
 const (
@@ -22,11 +22,11 @@ const (
 	olmv0RenewBefore              = 24 * time.Hour       // renew certificate within 24h of expiry
 )
 
-var _ render.CertificateProvider = (*CertManagerCertificateProvider)(nil)
+var _ convert.CertificateProvider = (*CertManagerCertificateProvider)(nil)
 
 type CertManagerCertificateProvider struct{}
 
-func (p CertManagerCertificateProvider) InjectCABundle(obj client.Object, cfg render.CertificateProvisionerConfig) error {
+func (p CertManagerCertificateProvider) InjectCABundle(obj client.Object, cfg convert.CertificateProvisionerConfig) error {
 	switch obj.(type) {
 	case *admissionregistrationv1.ValidatingWebhookConfiguration:
 		p.addCAInjectionAnnotation(obj, cfg.Namespace, cfg.CertName)
@@ -38,15 +38,15 @@ func (p CertManagerCertificateProvider) InjectCABundle(obj client.Object, cfg re
 	return nil
 }
 
-func (p CertManagerCertificateProvider) GetCertSecretInfo(cfg render.CertificateProvisionerConfig) render.CertSecretInfo {
-	return render.CertSecretInfo{
+func (p CertManagerCertificateProvider) GetCertSecretInfo(cfg convert.CertificateProvisionerConfig) convert.CertSecretInfo {
+	return convert.CertSecretInfo{
 		SecretName:     cfg.CertName,
 		PrivateKeyKey:  "tls.key",
 		CertificateKey: "tls.crt",
 	}
 }
 
-func (p CertManagerCertificateProvider) AdditionalObjects(cfg render.CertificateProvisionerConfig) ([]unstructured.Unstructured, error) {
+func (p CertManagerCertificateProvider) AdditionalObjects(cfg convert.CertificateProvisionerConfig) ([]unstructured.Unstructured, error) {
 	var (
 		objs []unstructured.Unstructured
 		errs []error
@@ -58,7 +58,7 @@ func (p CertManagerCertificateProvider) AdditionalObjects(cfg render.Certificate
 			Kind:       "Issuer",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      render.ObjectNameForBaseAndSuffix(cfg.CertName, "selfsigned-issuer"),
+			Name:      convert.ObjectNameForBaseAndSuffix(cfg.CertName, "selfsigned-issuer"),
 			Namespace: cfg.Namespace,
 		},
 		Spec: certmanagerv1.IssuerSpec{
@@ -67,7 +67,7 @@ func (p CertManagerCertificateProvider) AdditionalObjects(cfg render.Certificate
 			},
 		},
 	}
-	issuerObj, err := render.ToUnstructured(issuer)
+	issuerObj, err := convert.ToUnstructured(issuer)
 	if err != nil {
 		errs = append(errs, err)
 	} else {
@@ -103,7 +103,7 @@ func (p CertManagerCertificateProvider) AdditionalObjects(cfg render.Certificate
 			},
 		},
 	}
-	certObj, err := render.ToUnstructured(certificate)
+	certObj, err := convert.ToUnstructured(certificate)
 	if err != nil {
 		errs = append(errs, err)
 	} else {
@@ -120,5 +120,5 @@ func (p CertManagerCertificateProvider) addCAInjectionAnnotation(obj client.Obje
 	injectionAnnotation := map[string]string{
 		certManagerInjectCAAnnotation: fmt.Sprintf("%s/%s", certNamespace, certName),
 	}
-	obj.SetAnnotations(render.MergeMaps(obj.GetAnnotations(), injectionAnnotation))
+	obj.SetAnnotations(convert.MergeMaps(obj.GetAnnotations(), injectionAnnotation))
 }

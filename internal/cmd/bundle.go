@@ -10,8 +10,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/joelanford/orb/internal/destination"
-	"github.com/joelanford/orb/internal/render"
-	"github.com/joelanford/orb/internal/render/certproviders"
+	"github.com/joelanford/orb/internal/convert"
+	"github.com/joelanford/orb/internal/convert/certproviders"
 	"github.com/joelanford/orb/internal/source"
 	"github.com/joelanford/orb/internal/transport"
 )
@@ -166,7 +166,7 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 	}
 
 	// Build render options
-	var ropts []render.Option
+	var ropts []convert.Option
 
 	// Process config file if provided
 	if plainOpts.configFile != "" {
@@ -175,7 +175,7 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 			return fmt.Errorf("loading config file: %w", err)
 		}
 		if bundleCfg.WatchNamespace != "" {
-			ropts = append(ropts, render.WithTargetNamespaces(bundleCfg.WatchNamespace))
+			ropts = append(ropts, convert.WithTargetNamespaces(bundleCfg.WatchNamespace))
 		}
 	}
 
@@ -185,12 +185,12 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 		if err != nil {
 			return err
 		}
-		ropts = append(ropts, render.WithCertificateProvider(certProv))
+		ropts = append(ropts, convert.WithCertificateProvider(certProv))
 	}
 
 	dest, err := destination.NewPlain(destRef, destination.Options{
 		Namespace:  plainOpts.namespace,
-		RenderOpts: ropts,
+		ConvertOpts: ropts,
 	})
 	if err != nil {
 		return err
@@ -240,7 +240,7 @@ func runConvertHelm(cmd *cobra.Command, args []string) error {
 	return dest.Write(ctx, b)
 }
 
-func getCertificateProvider(provider string) (render.CertificateProvider, error) {
+func getCertificateProvider(provider string) (convert.CertificateProvider, error) {
 	switch provider {
 	case "cert-manager":
 		return certproviders.CertManagerCertificateProvider{}, nil
