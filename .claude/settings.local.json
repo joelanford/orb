@@ -12,7 +12,8 @@
       "Bash(jj log:*)",
       "Bash(grep:*)",
       "Bash(ls:*)",
-      "Bash(go vet:*)"
+      "Bash(go vet:*)",
+      "Bash(find:*)"
     ]
   }
 }
