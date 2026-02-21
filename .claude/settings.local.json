@@ -17,7 +17,10 @@
       "Bash(head:*)",
       "Bash(go doc:*)",
       "Bash(jj status:*)",
-      "Bash(jj diff:*)"
+      "Bash(jj diff:*)",
+      "WebSearch",
+      "Bash(make build:*)",
+      "Bash(make test:*)"
     ]
   }
 }

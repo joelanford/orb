@@ -1,0 +1,54 @@
+version: 2
+
+builds:
+  - main: ./cmd/orb
+    binary: orb
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - formats:
+      - tar.gz
+
+dockers:
+  - image_templates:
+      - "ghcr.io/joelanford/orb:{{ .Tag }}-amd64"
+      - "ghcr.io/joelanford/orb:latest-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    extra_files:
+      - orb
+    goarch: amd64
+  - image_templates:
+      - "ghcr.io/joelanford/orb:{{ .Tag }}-arm64"
+      - "ghcr.io/joelanford/orb:latest-arm64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    extra_files:
+      - orb
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/joelanford/orb:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/joelanford/orb:{{ .Tag }}-amd64"
+      - "ghcr.io/joelanford/orb:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/joelanford/orb:latest"
+    image_templates:
+      - "ghcr.io/joelanford/orb:latest-amd64"
+      - "ghcr.io/joelanford/orb:latest-arm64"
+
+changelog:
+  sort: asc

@@ -1,0 +1,19 @@
+version: "2"
+
+linters:
+  enable:
+    - errorlint
+    - gocritic
+    - misspell
+    - unconvert
+    - revive
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  errorlint:
+    asserts: true
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
