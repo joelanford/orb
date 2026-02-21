@@ -23,7 +23,7 @@ type Options struct {
 }
 
 // New creates a Source for the given transport reference and options.
-func New(tr transport.TransportRef, opts Options) (Source, error) {
+func New(tr transport.Ref, opts Options) (Source, error) {
 	switch tr.Transport {
 	case transport.Docker:
 		return &regv1Docker{ref: tr.Ref, opts: opts}, nil

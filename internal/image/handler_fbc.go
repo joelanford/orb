@@ -62,7 +62,7 @@ func (h *FBCHandler) Unpack(ctx context.Context, repo Repository, desc ocispecv1
 
 	configDir := cfg.Config.Labels[ConfigDirLabel]
 
-	unpacker := &ImageManifestUnpacker{
+	unpacker := &ManifestUnpacker{
 		Filter: CombineFilters(
 			OnlyPaths(configDir),
 			ForceOwnershipRWX(),

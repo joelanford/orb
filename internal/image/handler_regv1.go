@@ -42,7 +42,7 @@ func (h *RegistryV1Handler) Matches(ctx context.Context, repo Repository, desc o
 	return ok && mediaType == BundleMediaTypeRegistryV1
 }
 
-func (h *RegistryV1Handler) Unpack(ctx context.Context, repo Repository, desc ocispecv1.Descriptor, manifestBytes []byte, dest string) error {
+func (h *RegistryV1Handler) Unpack(ctx context.Context, repo Repository, _ ocispecv1.Descriptor, manifestBytes []byte, dest string) error {
 	cfg, err := FetchImageConfig(ctx, repo, manifestBytes)
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func (h *RegistryV1Handler) Unpack(ctx context.Context, repo Repository, desc oc
 	}
 	filters = append(filters, ForceOwnershipRWX())
 
-	unpacker := &ImageManifestUnpacker{
+	unpacker := &ManifestUnpacker{
 		Filter: CombineFilters(filters...),
 	}
 	return unpacker.Unpack(ctx, repo, manifestBytes, dest)

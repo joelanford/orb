@@ -30,16 +30,16 @@ func generateRBAC(b *bundle.RegistryV1) ([]byte, error) {
 			return nil, fmt.Errorf("rendering clusterPermission rules: %w", err)
 		}
 
-		sb.WriteString(fmt.Sprintf(`apiVersion: rbac.authorization.k8s.io/v1
+		fmt.Fprintf(&sb, `apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: %s
 rules:
 %s
-`, name, rulesYAML))
+`, name, rulesYAML)
 
 		sb.WriteString("---\n")
-		sb.WriteString(fmt.Sprintf(`apiVersion: rbac.authorization.k8s.io/v1
+		fmt.Fprintf(&sb, `apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: %s
@@ -51,7 +51,7 @@ subjects:
   - kind: ServiceAccount
     name: %s
     namespace: {{ .Release.Namespace }}
-`, name, name, saName))
+`, name, name, saName)
 	}
 
 	// 2. Permissions — conditional on watchNamespace
@@ -59,7 +59,6 @@ subjects:
 		if !first {
 			sb.WriteString("---\n")
 		}
-		first = false
 
 		// AllNamespaces mode: promote to ClusterRole + add namespace get/list/watch
 		sb.WriteString("{{- if eq .Values.watchNamespace \"\" }}\n")
@@ -87,16 +86,16 @@ subjects:
 				return nil, fmt.Errorf("rendering permission rules: %w", err)
 			}
 
-			sb.WriteString(fmt.Sprintf(`apiVersion: rbac.authorization.k8s.io/v1
+			fmt.Fprintf(&sb, `apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: %s
 rules:
 %s
-`, name, rulesYAML))
+`, name, rulesYAML)
 
 			sb.WriteString("---\n")
-			sb.WriteString(fmt.Sprintf(`apiVersion: rbac.authorization.k8s.io/v1
+			fmt.Fprintf(&sb, `apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: %s
@@ -108,7 +107,7 @@ subjects:
   - kind: ServiceAccount
     name: %s
     namespace: {{ .Release.Namespace }}
-`, name, name, saName))
+`, name, name, saName)
 		}
 
 		// Non-AllNamespaces mode: Role + RoleBinding in watchNamespace
@@ -128,17 +127,17 @@ subjects:
 				return nil, fmt.Errorf("rendering permission rules: %w", err)
 			}
 
-			sb.WriteString(fmt.Sprintf(`apiVersion: rbac.authorization.k8s.io/v1
+			fmt.Fprintf(&sb, `apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: %s
   namespace: {{ .Values.watchNamespace }}
 rules:
 %s
-`, name, rulesYAML))
+`, name, rulesYAML)
 
 			sb.WriteString("---\n")
-			sb.WriteString(fmt.Sprintf(`apiVersion: rbac.authorization.k8s.io/v1
+			fmt.Fprintf(&sb, `apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: %s
@@ -151,7 +150,7 @@ subjects:
   - kind: ServiceAccount
     name: %s
     namespace: {{ .Release.Namespace }}
-`, name, name, saName))
+`, name, name, saName)
 		}
 
 		sb.WriteString("{{- end }}\n")

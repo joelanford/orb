@@ -88,8 +88,7 @@ func WithLabels(labels map[string]string) func(client.Object) {
 // WithServiceSpec applies a service spec to a Service resource
 func WithServiceSpec(serviceSpec corev1.ServiceSpec) func(client.Object) {
 	return func(obj client.Object) {
-		switch o := obj.(type) {
-		case *corev1.Service:
+		if o, ok := obj.(*corev1.Service); ok {
 			o.Spec = serviceSpec
 		}
 	}
@@ -98,8 +97,7 @@ func WithServiceSpec(serviceSpec corev1.ServiceSpec) func(client.Object) {
 // WithValidatingWebhooks applies validating webhooks to a ValidatingWebhookConfiguration resource
 func WithValidatingWebhooks(webhooks ...admissionregistrationv1.ValidatingWebhook) func(client.Object) {
 	return func(obj client.Object) {
-		switch o := obj.(type) {
-		case *admissionregistrationv1.ValidatingWebhookConfiguration:
+		if o, ok := obj.(*admissionregistrationv1.ValidatingWebhookConfiguration); ok {
 			o.Webhooks = webhooks
 		}
 	}
@@ -108,8 +106,7 @@ func WithValidatingWebhooks(webhooks ...admissionregistrationv1.ValidatingWebhoo
 // WithMutatingWebhooks applies mutating webhooks to a MutatingWebhookConfiguration resource
 func WithMutatingWebhooks(webhooks ...admissionregistrationv1.MutatingWebhook) func(client.Object) {
 	return func(obj client.Object) {
-		switch o := obj.(type) {
-		case *admissionregistrationv1.MutatingWebhookConfiguration:
+		if o, ok := obj.(*admissionregistrationv1.MutatingWebhookConfiguration); ok {
 			o.Webhooks = webhooks
 		}
 	}

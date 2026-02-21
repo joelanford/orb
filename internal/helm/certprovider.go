@@ -35,19 +35,19 @@ func generateCertProvider(b *bundle.RegistryV1) ([]byte, error) {
 		first = false
 
 		// Issuer
-		sb.WriteString(fmt.Sprintf(`apiVersion: cert-manager.io/v1
+		fmt.Fprintf(&sb, `apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   name: %s
   namespace: {{ .Release.Namespace }}
 spec:
   selfSigned: {}
-`, issuerName))
+`, issuerName)
 
 		sb.WriteString("---\n")
 
 		// Certificate
-		sb.WriteString(fmt.Sprintf(`apiVersion: cert-manager.io/v1
+		fmt.Fprintf(&sb, `apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: %s
@@ -65,7 +65,7 @@ spec:
     name: %s
   duration: 17520h0m0s
   renewBefore: 24h0m0s
-`, certName, certName, svcName, svcName, svcName, issuerName))
+`, certName, certName, svcName, svcName, svcName, issuerName)
 	}
 
 	sb.WriteString("{{- end }}\n")

@@ -50,11 +50,11 @@ func writeValidatingWebhook(sb *strings.Builder, webhookName, svcName, certName 
 	sb.WriteString("apiVersion: admissionregistration.k8s.io/v1\n")
 	sb.WriteString("kind: ValidatingWebhookConfiguration\n")
 	sb.WriteString("metadata:\n")
-	sb.WriteString(fmt.Sprintf("  name: %s\n", webhookName))
+	fmt.Fprintf(sb, "  name: %s\n", webhookName)
 	writeWebhookCertAnnotations(sb, certName)
 
 	sb.WriteString("webhooks:\n")
-	sb.WriteString(fmt.Sprintf("- name: %s\n", webhookName))
+	fmt.Fprintf(sb, "- name: %s\n", webhookName)
 
 	writeWebhookBody(sb, svcName, wh)
 }
@@ -63,16 +63,16 @@ func writeMutatingWebhook(sb *strings.Builder, webhookName, svcName, certName st
 	sb.WriteString("apiVersion: admissionregistration.k8s.io/v1\n")
 	sb.WriteString("kind: MutatingWebhookConfiguration\n")
 	sb.WriteString("metadata:\n")
-	sb.WriteString(fmt.Sprintf("  name: %s\n", webhookName))
+	fmt.Fprintf(sb, "  name: %s\n", webhookName)
 	writeWebhookCertAnnotations(sb, certName)
 
 	sb.WriteString("webhooks:\n")
-	sb.WriteString(fmt.Sprintf("- name: %s\n", webhookName))
+	fmt.Fprintf(sb, "- name: %s\n", webhookName)
 
 	writeWebhookBody(sb, svcName, wh)
 
 	if wh.ReinvocationPolicy != nil {
-		sb.WriteString(fmt.Sprintf("  reinvocationPolicy: %s\n", string(*wh.ReinvocationPolicy)))
+		fmt.Fprintf(sb, "  reinvocationPolicy: %s\n", string(*wh.ReinvocationPolicy))
 	}
 }
 
@@ -80,13 +80,13 @@ func writeWebhookBody(sb *strings.Builder, svcName string, wh v1alpha1.WebhookDe
 	// ClientConfig
 	sb.WriteString("  clientConfig:\n")
 	sb.WriteString("    service:\n")
-	sb.WriteString(fmt.Sprintf("      name: %s\n", svcName))
+	fmt.Fprintf(sb, "      name: %s\n", svcName)
 	sb.WriteString("      namespace: {{ .Release.Namespace }}\n")
 	if wh.WebhookPath != nil {
-		sb.WriteString(fmt.Sprintf("      path: %s\n", *wh.WebhookPath))
+		fmt.Fprintf(sb, "      path: %s\n", *wh.WebhookPath)
 	}
 	if wh.ContainerPort > 0 {
-		sb.WriteString(fmt.Sprintf("      port: %d\n", wh.ContainerPort))
+		fmt.Fprintf(sb, "      port: %d\n", wh.ContainerPort)
 	}
 
 	// Rules
@@ -100,29 +100,29 @@ func writeWebhookBody(sb *strings.Builder, svcName string, wh v1alpha1.WebhookDe
 
 	// FailurePolicy
 	if wh.FailurePolicy != nil {
-		sb.WriteString(fmt.Sprintf("  failurePolicy: %s\n", string(*wh.FailurePolicy)))
+		fmt.Fprintf(sb, "  failurePolicy: %s\n", string(*wh.FailurePolicy))
 	}
 
 	// MatchPolicy
 	if wh.MatchPolicy != nil {
-		sb.WriteString(fmt.Sprintf("  matchPolicy: %s\n", string(*wh.MatchPolicy)))
+		fmt.Fprintf(sb, "  matchPolicy: %s\n", string(*wh.MatchPolicy))
 	}
 
 	// SideEffects
 	if wh.SideEffects != nil {
-		sb.WriteString(fmt.Sprintf("  sideEffects: %s\n", string(*wh.SideEffects)))
+		fmt.Fprintf(sb, "  sideEffects: %s\n", string(*wh.SideEffects))
 	}
 
 	// TimeoutSeconds
 	if wh.TimeoutSeconds != nil {
-		sb.WriteString(fmt.Sprintf("  timeoutSeconds: %d\n", *wh.TimeoutSeconds))
+		fmt.Fprintf(sb, "  timeoutSeconds: %d\n", *wh.TimeoutSeconds)
 	}
 
 	// AdmissionReviewVersions
 	if len(wh.AdmissionReviewVersions) > 0 {
 		sb.WriteString("  admissionReviewVersions:\n")
 		for _, v := range wh.AdmissionReviewVersions {
-			sb.WriteString(fmt.Sprintf("  - %s\n", v))
+			fmt.Fprintf(sb, "  - %s\n", v)
 		}
 	}
 
@@ -149,7 +149,7 @@ func writeWebhookBody(sb *strings.Builder, svcName string, wh v1alpha1.WebhookDe
 func writeWebhookCertAnnotations(sb *strings.Builder, certName string) {
 	sb.WriteString("  {{- if eq .Values.certProvider \"cert-manager\" }}\n")
 	sb.WriteString("  annotations:\n")
-	sb.WriteString(fmt.Sprintf("    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/%s\n", certName))
+	fmt.Fprintf(sb, "    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/%s\n", certName)
 	sb.WriteString("  {{- else if eq .Values.certProvider \"service-ca\" }}\n")
 	sb.WriteString("  annotations:\n")
 	sb.WriteString("    service.beta.openshift.io/inject-cabundle: \"true\"\n")
@@ -191,13 +191,13 @@ func generateWebhookServices(b *bundle.RegistryV1) ([]byte, error) {
 		sb.WriteString("apiVersion: v1\n")
 		sb.WriteString("kind: Service\n")
 		sb.WriteString("metadata:\n")
-		sb.WriteString(fmt.Sprintf("  name: %s\n", svcName))
+		fmt.Fprintf(&sb, "  name: %s\n", svcName)
 		sb.WriteString("  namespace: {{ .Release.Namespace }}\n")
 
 		// service-ca annotation for service
 		sb.WriteString("  {{- if eq .Values.certProvider \"service-ca\" }}\n")
 		sb.WriteString("  annotations:\n")
-		sb.WriteString(fmt.Sprintf("    service.beta.openshift.io/serving-cert-secret-name: %s\n", certName))
+		fmt.Fprintf(&sb, "    service.beta.openshift.io/serving-cert-secret-name: %s\n", certName)
 		sb.WriteString("  {{- end }}\n")
 
 		sb.WriteString("spec:\n")
@@ -206,15 +206,15 @@ func generateWebhookServices(b *bundle.RegistryV1) ([]byte, error) {
 		if depSpec.Spec.Selector != nil && len(depSpec.Spec.Selector.MatchLabels) > 0 {
 			sb.WriteString("  selector:\n")
 			for k, v := range depSpec.Spec.Selector.MatchLabels {
-				sb.WriteString(fmt.Sprintf("    %s: %s\n", escapeHelm(k), escapeYAMLString(v)))
+				fmt.Fprintf(&sb, "    %s: %s\n", escapeHelm(k), escapeYAMLString(v))
 			}
 		}
 
 		sb.WriteString("  ports:\n")
 		for _, port := range ports {
-			sb.WriteString(fmt.Sprintf("  - name: \"%d\"\n", port.Port))
-			sb.WriteString(fmt.Sprintf("    port: %d\n", port.Port))
-			sb.WriteString(fmt.Sprintf("    targetPort: %s\n", port.TargetPort.String()))
+			fmt.Fprintf(&sb, "  - name: \"%d\"\n", port.Port)
+			fmt.Fprintf(&sb, "    port: %d\n", port.Port)
+			fmt.Fprintf(&sb, "    targetPort: %s\n", port.TargetPort.String())
 		}
 	}
 

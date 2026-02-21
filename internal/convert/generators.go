@@ -159,9 +159,9 @@ func BundleCSVServiceAccountGenerator(rv1 *bundle.RegistryV1, opts Options) ([]c
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
-	allPermissions := append(
+	allPermissions := slices.Concat(
 		rv1.CSV.Spec.InstallStrategy.StrategySpec.Permissions,
-		rv1.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions...,
+		rv1.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions,
 	)
 
 	serviceAccountNames := sets.Set[string]{}

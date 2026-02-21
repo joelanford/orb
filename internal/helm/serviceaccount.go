@@ -11,9 +11,9 @@ import (
 )
 
 func generateServiceAccounts(b *bundle.RegistryV1) ([]byte, error) {
-	allPermissions := append(
+	allPermissions := slices.Concat(
 		b.CSV.Spec.InstallStrategy.StrategySpec.Permissions,
-		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions...,
+		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions,
 	)
 
 	serviceAccountNames := sets.New[string]()
@@ -31,12 +31,12 @@ func generateServiceAccounts(b *bundle.RegistryV1) ([]byte, error) {
 			sb.WriteString("---\n")
 		}
 		first = false
-		sb.WriteString(fmt.Sprintf(`apiVersion: v1
+		fmt.Fprintf(&sb, `apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: %s
   namespace: {{ .Release.Namespace }}
-`, saName))
+`, saName)
 	}
 
 	return []byte(sb.String()), nil

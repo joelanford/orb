@@ -214,7 +214,7 @@ If the resolved digest has not changed, the pull is skipped.`,
 }
 
 func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions) error {
-	tRef, err := transport.ParseTransportRef(ref)
+	tRef, err := transport.ParseRef(ref)
 	if err != nil {
 		return err
 	}
@@ -365,7 +365,7 @@ func runCatalogUpdate(cmd *cobra.Command, name string) error {
 	for _, catName := range toUpdate {
 		cat, _ := cfg.Get(catName)
 
-		tRef, err := transport.ParseTransportRef(cat.Ref)
+		tRef, err := transport.ParseRef(cat.Ref)
 		if err != nil {
 			return fmt.Errorf("catalog %q: %w", catName, err)
 		}

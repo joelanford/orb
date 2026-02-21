@@ -9,9 +9,9 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/yaml"
 
-	"github.com/joelanford/orb/internal/destination"
 	"github.com/joelanford/orb/internal/convert"
 	"github.com/joelanford/orb/internal/convert/certproviders"
+	"github.com/joelanford/orb/internal/destination"
 	"github.com/joelanford/orb/internal/source"
 	"github.com/joelanford/orb/internal/transport"
 )
@@ -130,16 +130,14 @@ Examples:
   orb bundle convert helm docker://quay.io/my/bundle:v1 docker://quay.io/my/chart:v1
   orb bundle convert helm oci:/path/to/layout:latest oci-archive:/tmp/chart.tar`,
 		Args: cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConvertHelm(cmd, args)
-		},
+		RunE: runConvertHelm,
 	}
 
 	return cmd
 }
 
 func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions) error {
-	srcRef, err := transport.ParseTransportRef(args[0])
+	srcRef, err := transport.ParseRef(args[0])
 	if err != nil {
 		return err
 	}
@@ -147,9 +145,9 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 		return fmt.Errorf("stdout cannot be used as a source transport")
 	}
 
-	destRef := transport.TransportRef{Transport: transport.Stdout}
+	destRef := transport.Ref{Transport: transport.Stdout}
 	if len(args) > 1 {
-		destRef, err = transport.ParseTransportRef(args[1])
+		destRef, err = transport.ParseRef(args[1])
 		if err != nil {
 			return err
 		}
@@ -189,7 +187,7 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 	}
 
 	dest, err := destination.NewPlain(destRef, destination.Options{
-		Namespace:  plainOpts.namespace,
+		Namespace:   plainOpts.namespace,
 		ConvertOpts: ropts,
 	})
 	if err != nil {
@@ -207,7 +205,7 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 }
 
 func runConvertHelm(cmd *cobra.Command, args []string) error {
-	srcRef, err := transport.ParseTransportRef(args[0])
+	srcRef, err := transport.ParseRef(args[0])
 	if err != nil {
 		return err
 	}
@@ -215,7 +213,7 @@ func runConvertHelm(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("stdout cannot be used as a source transport")
 	}
 
-	destRef, err := transport.ParseTransportRef(args[1])
+	destRef, err := transport.ParseRef(args[1])
 	if err != nil {
 		return err
 	}

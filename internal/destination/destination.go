@@ -16,16 +16,16 @@ type Destination interface {
 
 // Options holds authentication, TLS, and render settings for destination transports.
 type Options struct {
-	Username   string
-	Password   string
-	TLSVerify  bool
-	CertDir    string
-	NoCreds    bool
-	Namespace  string
+	Username    string
+	Password    string
+	TLSVerify   bool
+	CertDir     string
+	NoCreds     bool
+	Namespace   string
 	ConvertOpts []convert.Option
 }
 
-func NewHelm(tr transport.TransportRef, opts Options) (Destination, error) {
+func NewHelm(tr transport.Ref, opts Options) (Destination, error) {
 	switch tr.Transport {
 	case transport.Docker:
 		return &helmDocker{ref: tr.Ref, opts: opts}, nil
@@ -40,7 +40,7 @@ func NewHelm(tr transport.TransportRef, opts Options) (Destination, error) {
 	}
 }
 
-func NewPlain(tr transport.TransportRef, opts Options) (Destination, error) {
+func NewPlain(tr transport.Ref, opts Options) (Destination, error) {
 	switch tr.Transport {
 	case transport.Dir:
 		return &plainDir{ref: tr.Ref, opts: opts}, nil

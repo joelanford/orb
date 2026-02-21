@@ -26,14 +26,14 @@ func TestObjectNameForBaseAndSuffix(t *testing.T) {
 		{
 			name:   "exact max length",
 			base:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // 58 chars
-			suffix: "abcd",                                                      // 4 chars => 58 + 4 = 62, not > 63, no truncation => output 58+1+4=63
+			suffix: "abcd",                                                       // 4 chars => 58 + 4 = 62, not > 63, no truncation => output 58+1+4=63
 			want:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-abcd",
 		},
 		{
 			name:   "exceeds max length truncated",
 			base:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // 63 chars
-			suffix: "abcd",                                                           // 63 + 4 = 67 > 63, truncated => base becomes 58 chars
-			want:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-abcd",  // 58 + 1 + 4 = 63
+			suffix: "abcd",                                                            // 63 + 4 = 67 > 63, truncated => base becomes 58 chars
+			want:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-abcd", //nolint:gocritic // 58+1+4=63
 		},
 		{
 			name:   "empty suffix",

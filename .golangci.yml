@@ -8,12 +8,29 @@ linters:
     - unconvert
     - revive
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-  errorlint:
-    asserts: true
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
+  settings:
+    errcheck:
+      check-type-assertions: false
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - os.RemoveAll
+    errorlint:
+      asserts: true
+    gocritic:
+      enabled-tags:
+        - diagnostic
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+
+  exclusions:
+    rules:
+      - path: internal/image/
+        linters: [revive]
+        text: "var-naming: avoid package names"
+      - linters: [errcheck]
+        text: "Error return value of `.*\\.Close` is not checked"

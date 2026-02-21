@@ -35,8 +35,8 @@ func (t Transport) String() string {
 	}
 }
 
-// TransportRef holds a parsed transport and its reference string.
-type TransportRef struct {
+// Ref holds a parsed transport and its reference string.
+type Ref struct {
 	Transport Transport
 	Ref       string
 }
@@ -53,18 +53,18 @@ var prefixes = []struct {
 	{"dir:", Dir},
 }
 
-// ParseTransportRef parses a "transport:ref" string using longest-prefix-first matching.
-func ParseTransportRef(s string) (TransportRef, error) {
+// ParseRef parses a "transport:ref" string using longest-prefix-first matching.
+func ParseRef(s string) (Ref, error) {
 	if s == "stdout" {
-		return TransportRef{Transport: Stdout}, nil
+		return Ref{Transport: Stdout}, nil
 	}
 	for _, p := range prefixes {
 		if strings.HasPrefix(s, p.prefix) {
-			return TransportRef{
+			return Ref{
 				Transport: p.transport,
 				Ref:       s[len(p.prefix):],
 			}, nil
 		}
 	}
-	return TransportRef{}, fmt.Errorf("unknown transport in %q", s)
+	return Ref{}, fmt.Errorf("unknown transport in %q", s)
 }

@@ -89,7 +89,7 @@ func FromFS(fsys fs.FS) (RegistryV1, error) {
 			}
 			return nil
 		}); err != nil {
-			return fmt.Errorf("error parsing objects in %q: %v", path, err)
+			return fmt.Errorf("error parsing objects in %q: %w", path, err)
 		}
 		return nil
 	}); err != nil {

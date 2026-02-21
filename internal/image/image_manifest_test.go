@@ -11,12 +11,12 @@ import (
 )
 
 func TestCombineFilters(t *testing.T) {
-	passFilter := func(h *tar.Header) (bool, error) { return true, nil }
-	rejectFilter := func(h *tar.Header) (bool, error) { return false, nil }
-	errorFilter := func(h *tar.Header) (bool, error) { return false, fmt.Errorf("filter error") }
+	passFilter := func(_ *tar.Header) (bool, error) { return true, nil }
+	rejectFilter := func(_ *tar.Header) (bool, error) { return false, nil }
+	errorFilter := func(_ *tar.Header) (bool, error) { return false, fmt.Errorf("filter error") }
 
 	t.Run("AllPass", func(t *testing.T) {
-		combined := CombineFilters(passFilter, passFilter)
+		combined := CombineFilters(passFilter, passFilter) //nolint:gocritic // intentional duplicate for testing
 		keep, err := combined(&tar.Header{Name: "test"})
 		require.NoError(t, err)
 		assert.True(t, keep)

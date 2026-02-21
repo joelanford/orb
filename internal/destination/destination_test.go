@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +32,7 @@ func TestNewHelm(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dest, err := NewHelm(transport.TransportRef{Transport: tt.transport, Ref: "test-ref"}, Options{})
+			dest, err := NewHelm(transport.Ref{Transport: tt.transport, Ref: "test-ref"}, Options{})
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "unsupported")
@@ -57,7 +57,7 @@ func TestNewPlain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dest, err := NewPlain(transport.TransportRef{Transport: tt.transport, Ref: "test-ref"}, Options{})
+			dest, err := NewPlain(transport.Ref{Transport: tt.transport, Ref: "test-ref"}, Options{})
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "unsupported")

@@ -2,7 +2,6 @@ package catalog
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -510,5 +509,5 @@ func TestResolve_EmptyCatalog(t *testing.T) {
 	// Use a version constraint that excludes all bundles
 	_, err := Resolve(cfg, "my-pkg", ResolveOptions{Version: ">=99.0.0"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), fmt.Sprintf("no bundle found matching constraints"))
+	assert.Contains(t, err.Error(), "no bundle found matching constraints")
 }

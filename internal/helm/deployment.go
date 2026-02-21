@@ -41,7 +41,7 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 	sb.WriteString("apiVersion: apps/v1\n")
 	sb.WriteString("kind: Deployment\n")
 	sb.WriteString("metadata:\n")
-	sb.WriteString(fmt.Sprintf("  name: %s\n", depSpec.Name))
+	fmt.Fprintf(sb, "  name: %s\n", depSpec.Name)
 	sb.WriteString("  namespace: {{ .Release.Namespace }}\n")
 
 	if len(depSpec.Label) > 0 {
@@ -59,7 +59,7 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 	sb.WriteString("  revisionHistoryLimit: 1\n")
 
 	if depSpec.Spec.Replicas != nil {
-		sb.WriteString(fmt.Sprintf("  replicas: %d\n", *depSpec.Spec.Replicas))
+		fmt.Fprintf(sb, "  replicas: %d\n", *depSpec.Spec.Replicas)
 	}
 
 	if depSpec.Spec.Selector != nil {
@@ -99,7 +99,7 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 	if depSpec.Spec.Template.Labels != nil {
 		sb.WriteString("      labels:\n")
 		for k, v := range depSpec.Spec.Template.Labels {
-			sb.WriteString(fmt.Sprintf("        %s: %s\n", escapeHelm(k), escapeYAMLString(v)))
+			fmt.Fprintf(sb, "        %s: %s\n", escapeHelm(k), escapeYAMLString(v))
 		}
 	}
 
@@ -111,7 +111,7 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 		if k == "olm.targetNamespaces" {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("        %s: %s\n", escapeHelm(k), escapeYAMLString(v)))
+		fmt.Fprintf(sb, "        %s: %s\n", escapeHelm(k), escapeYAMLString(v))
 		baseAnnoKeys = append(baseAnnoKeys, k)
 	}
 	sb.WriteString("        olm.targetNamespaces: {{ include \"olmTargetNamespaces\" . }}\n")
@@ -122,7 +122,7 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 		sb.WriteString("        {{- range $k, $v := .Values.deploymentConfig.annotations }}\n")
 		sb.WriteString("        {{- if not (hasKey (dict")
 		for _, k := range baseAnnoKeys {
-			sb.WriteString(fmt.Sprintf(" %q \"\"", k))
+			fmt.Fprintf(sb, " %q \"\"", k)
 		}
 		sb.WriteString(" \"olm.targetNamespaces\" \"\") $k) }}\n")
 		sb.WriteString("        {{ $k }}: {{ $v }}\n")
@@ -144,7 +144,7 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 
 	// ServiceAccountName
 	if depSpec.Spec.Template.Spec.ServiceAccountName != "" {
-		sb.WriteString(fmt.Sprintf("      serviceAccountName: %s\n", depSpec.Spec.Template.Spec.ServiceAccountName))
+		fmt.Fprintf(sb, "      serviceAccountName: %s\n", depSpec.Spec.Template.Spec.ServiceAccountName)
 	}
 
 	// NodeSelector — replace semantics
@@ -180,7 +180,7 @@ func writeNodeSelector(sb *strings.Builder, base map[string]string) {
 	if len(base) > 0 {
 		sb.WriteString("      nodeSelector:\n")
 		for k, v := range base {
-			sb.WriteString(fmt.Sprintf("        %s: %s\n", escapeHelm(k), escapeYAMLString(v)))
+			fmt.Fprintf(sb, "        %s: %s\n", escapeHelm(k), escapeYAMLString(v))
 		}
 	}
 	sb.WriteString("      {{- end }}\n")
@@ -216,12 +216,12 @@ func writeAffinitySubField(sb *strings.Builder, field string, baseValue interfac
 		hasBase = v != nil
 	}
 
-	sb.WriteString(fmt.Sprintf("        {{- if %s }}\n", configPath))
-	sb.WriteString(fmt.Sprintf("        %s: {{- toYaml %s | nindent 10 }}\n", field, configPath))
+	fmt.Fprintf(sb, "        {{- if %s }}\n", configPath)
+	fmt.Fprintf(sb, "        %s: {{- toYaml %s | nindent 10 }}\n", field, configPath)
 	if hasBase {
 		sb.WriteString("        {{- else }}\n")
 		baseData, _ := yaml.Marshal(baseValue)
-		sb.WriteString(fmt.Sprintf("        %s:\n", field))
+		fmt.Fprintf(sb, "        %s:\n", field)
 		for _, line := range strings.Split(strings.TrimRight(string(baseData), "\n"), "\n") {
 			sb.WriteString("          " + escapeHelm(line) + "\n")
 		}
@@ -265,14 +265,14 @@ func writeVolumes(sb *strings.Builder, base []corev1.Volume, isWebhookDep bool, 
 	if isWebhookDep {
 		sb.WriteString("      {{- if ne .Values.certProvider \"\" }}\n")
 		for _, cfg := range certVolumeConfigList {
-			sb.WriteString(fmt.Sprintf("      - name: %s\n", cfg.Name))
+			fmt.Fprintf(sb, "      - name: %s\n", cfg.Name)
 			sb.WriteString("        secret:\n")
-			sb.WriteString(fmt.Sprintf("          secretName: %s\n", certName))
+			fmt.Fprintf(sb, "          secretName: %s\n", certName)
 			sb.WriteString("          items:\n")
 			sb.WriteString("          - key: tls.crt\n")
-			sb.WriteString(fmt.Sprintf("            path: %s\n", cfg.TLSCertPath))
+			fmt.Fprintf(sb, "            path: %s\n", cfg.TLSCertPath)
 			sb.WriteString("          - key: tls.key\n")
-			sb.WriteString(fmt.Sprintf("            path: %s\n", cfg.TLSKeyPath))
+			fmt.Fprintf(sb, "            path: %s\n", cfg.TLSKeyPath)
 		}
 		sb.WriteString("      {{- end }}\n")
 	}
@@ -294,11 +294,11 @@ func writeContainers(sb *strings.Builder, containers []corev1.Container, isWebho
 }
 
 func writeContainerBase(sb *strings.Builder, c corev1.Container, isWebhookDep bool, _ string) {
-	sb.WriteString(fmt.Sprintf("      - name: %s\n", c.Name))
-	sb.WriteString(fmt.Sprintf("        image: %s\n", escapeYAMLString(c.Image)))
+	fmt.Fprintf(sb, "      - name: %s\n", c.Name)
+	fmt.Fprintf(sb, "        image: %s\n", escapeYAMLString(c.Image))
 
 	if c.ImagePullPolicy != "" {
-		sb.WriteString(fmt.Sprintf("        imagePullPolicy: %s\n", c.ImagePullPolicy))
+		fmt.Fprintf(sb, "        imagePullPolicy: %s\n", c.ImagePullPolicy)
 	}
 
 	if len(c.Command) > 0 {
@@ -368,7 +368,7 @@ func writeContainerBase(sb *strings.Builder, c corev1.Container, isWebhookDep bo
 func writeContainerEnv(sb *strings.Builder, baseEnv []corev1.EnvVar) {
 	if len(baseEnv) > 0 {
 		baseJSON, _ := json.Marshal(baseEnv)
-		sb.WriteString(fmt.Sprintf("        env: {{- include \"mergeEnv\" (dict \"base\" `%s` \"overrides\" .Values.deploymentConfig.env) | nindent 8 }}\n", string(baseJSON)))
+		fmt.Fprintf(sb, "        env: {{- include \"mergeEnv\" (dict \"base\" `%s` \"overrides\" .Values.deploymentConfig.env) | nindent 8 }}\n", string(baseJSON))
 	} else {
 		sb.WriteString("        {{- with .Values.deploymentConfig.env }}\n")
 		sb.WriteString("        env: {{- toYaml . | nindent 8 }}\n")
@@ -426,8 +426,8 @@ func writeContainerVolumeMounts(sb *strings.Builder, baseMounts []corev1.VolumeM
 			sb.WriteString("        volumeMounts:\n")
 		}
 		for _, cfg := range certVolumeConfigList {
-			sb.WriteString(fmt.Sprintf("        - name: %s\n", cfg.Name))
-			sb.WriteString(fmt.Sprintf("          mountPath: %s\n", cfg.Path))
+			fmt.Fprintf(sb, "        - name: %s\n", cfg.Name)
+			fmt.Fprintf(sb, "          mountPath: %s\n", cfg.Path)
 		}
 		sb.WriteString("        {{- end }}\n")
 	}
@@ -440,4 +440,3 @@ func writeContainerVolumeMounts(sb *strings.Builder, baseMounts []corev1.VolumeM
 	sb.WriteString("        {{- toYaml . | nindent 8 }}\n")
 	sb.WriteString("        {{- end }}\n")
 }
-

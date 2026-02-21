@@ -23,6 +23,11 @@ verify:
 	go vet ./...
 	git diff --exit-code
 
+export IMAGE_TAG ?= dev
+export ENABLE_RELEASE_PIPELINE ?= false
+GORELEASER_ARGS ?= --snapshot --clean
+
 .PHONY: release
 release:
-	go tool goreleaser release --snapshot --clean
+	@docker buildx use goreleaser 2>/dev/null || docker buildx create --name goreleaser --use
+	go tool goreleaser release $(GORELEASER_ARGS)

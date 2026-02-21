@@ -47,13 +47,13 @@ func decodeImageConfig(reader io.Reader) (*ocispecv1.Image, error) {
 // Return true to keep the entry, false to skip it.
 type LayerFilter = archive.Filter
 
-// ImageManifestUnpacker unpacks OCI image manifests by applying layers in order.
-type ImageManifestUnpacker struct {
+// ManifestUnpacker unpacks OCI image manifests by applying layers in order.
+type ManifestUnpacker struct {
 	Filter LayerFilter
 }
 
 // Unpack extracts layers from the manifest in order, applying the configured filter.
-func (u *ImageManifestUnpacker) Unpack(ctx context.Context, repo Repository, manifestBytes []byte, dest string) error {
+func (u *ManifestUnpacker) Unpack(ctx context.Context, repo Repository, manifestBytes []byte, dest string) error {
 	l := klog.FromContext(ctx)
 
 	var manifest ocispecv1.Manifest
@@ -71,7 +71,7 @@ func (u *ImageManifestUnpacker) Unpack(ctx context.Context, repo Repository, man
 	return nil
 }
 
-func (u *ImageManifestUnpacker) applyLayer(ctx context.Context, repo Repository, dest string, layer ocispecv1.Descriptor) error {
+func (u *ManifestUnpacker) applyLayer(ctx context.Context, repo Repository, dest string, layer ocispecv1.Descriptor) error {
 	reader, err := repo.FetchBlob(ctx, layer)
 	if err != nil {
 		return err
@@ -81,7 +81,7 @@ func (u *ImageManifestUnpacker) applyLayer(ctx context.Context, repo Repository,
 	return errors.Join(err, reader.Close())
 }
 
-func (u *ImageManifestUnpacker) decompressAndApply(ctx context.Context, dest string, reader io.Reader) error {
+func (u *ManifestUnpacker) decompressAndApply(ctx context.Context, dest string, reader io.Reader) error {
 	decompressed, _, err := compression.AutoDecompress(reader)
 	if err != nil {
 		return fmt.Errorf("decompressing layer: %w", err)
@@ -91,7 +91,7 @@ func (u *ImageManifestUnpacker) decompressAndApply(ctx context.Context, dest str
 	return errors.Join(err, decompressed.Close())
 }
 
-func (u *ImageManifestUnpacker) applyArchive(ctx context.Context, dest string, reader io.Reader) error {
+func (u *ManifestUnpacker) applyArchive(ctx context.Context, dest string, reader io.Reader) error {
 	var opts []archive.ApplyOpt
 	if u.Filter != nil {
 		opts = append(opts, archive.WithFilter(u.Filter))

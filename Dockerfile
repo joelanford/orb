@@ -1,3 +1,4 @@
 FROM gcr.io/distroless/static:nonroot
-COPY orb /orb
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/orb /orb
 ENTRYPOINT ["/orb"]

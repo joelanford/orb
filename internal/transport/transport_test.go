@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestParseTransportRef(t *testing.T) {
+func TestParseRef(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
@@ -25,19 +25,19 @@ func TestParseTransportRef(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseTransportRef(tt.input)
+			got, err := ParseRef(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseTransportRef(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				t.Errorf("ParseRef(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 				return
 			}
 			if err != nil {
 				return
 			}
 			if got.Transport != tt.wantTr {
-				t.Errorf("ParseTransportRef(%q).Transport = %v, want %v", tt.input, got.Transport, tt.wantTr)
+				t.Errorf("ParseRef(%q).Transport = %v, want %v", tt.input, got.Transport, tt.wantTr)
 			}
 			if got.Ref != tt.wantRef {
-				t.Errorf("ParseTransportRef(%q).Ref = %q, want %q", tt.input, got.Ref, tt.wantRef)
+				t.Errorf("ParseRef(%q).Ref = %q, want %q", tt.input, got.Ref, tt.wantRef)
 			}
 		})
 	}

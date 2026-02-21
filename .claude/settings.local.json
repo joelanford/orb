@@ -20,7 +20,9 @@
       "Bash(jj diff:*)",
       "WebSearch",
       "Bash(make build:*)",
-      "Bash(make test:*)"
+      "Bash(make test:*)",
+      "Bash(tail:*)",
+      "Bash(make lint:*)"
     ]
   }
 }
