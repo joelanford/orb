@@ -21,7 +21,7 @@ verify:
 	go mod tidy
 	gofmt -w -s .
 	go vet ./...
-	git diff --exit-code
+	./hack/diff.sh
 
 export IMAGE_TAG ?= dev
 export ENABLE_RELEASE_PIPELINE ?= false
