@@ -4,6 +4,10 @@
 build:
 	go build -o orb ./cmd/orb
 
+.PHONY: install
+install:
+	go install ./cmd/orb
+
 .PHONY: test
 test:
 	go test ./... -count=1
