@@ -21,19 +21,7 @@ type bundleConfig struct {
 	WatchNamespace string `json:"watchNamespace,omitempty"`
 }
 
-type renderOptions struct {
-	srcUsername  string
-	srcPassword string
-	srcTLSVerify bool
-	srcCertDir  string
-	srcNoCreds  bool
-
-	destUsername  string
-	destPassword string
-	destTLSVerify bool
-	destCertDir  string
-	destNoCreds  bool
-
+type convertOptions struct {
 	quiet bool
 }
 
@@ -53,7 +41,7 @@ func newBundleCmd() *cobra.Command {
 }
 
 func newBundleConvertCmd() *cobra.Command {
-	opts := &renderOptions{}
+	opts := &convertOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "convert",
@@ -81,28 +69,15 @@ Use a subcommand to choose the destination format:
 		},
 	}
 
-	pflags := cmd.PersistentFlags()
-	pflags.StringVar(&opts.srcUsername, "src-username", "", "Source registry username")
-	pflags.StringVar(&opts.srcPassword, "src-password", "", "Source registry password")
-	pflags.BoolVar(&opts.srcTLSVerify, "src-tls-verify", true, "Require HTTPS and verify certificates for source")
-	pflags.StringVar(&opts.srcCertDir, "src-cert-dir", "", "Source certificate directory")
-	pflags.BoolVar(&opts.srcNoCreds, "src-no-creds", false, "Do not use credentials for source")
+	cmd.PersistentFlags().BoolVarP(&opts.quiet, "quiet", "q", false, "Suppress output")
 
-	pflags.StringVar(&opts.destUsername, "dest-username", "", "Destination registry username")
-	pflags.StringVar(&opts.destPassword, "dest-password", "", "Destination registry password")
-	pflags.BoolVar(&opts.destTLSVerify, "dest-tls-verify", true, "Require HTTPS and verify certificates for destination")
-	pflags.StringVar(&opts.destCertDir, "dest-cert-dir", "", "Destination certificate directory")
-	pflags.BoolVar(&opts.destNoCreds, "dest-no-creds", false, "Do not use credentials for destination")
-
-	pflags.BoolVarP(&opts.quiet, "quiet", "q", false, "Suppress output")
-
-	cmd.AddCommand(newConvertPlainCmd(opts))
-	cmd.AddCommand(newConvertHelmCmd(opts))
+	cmd.AddCommand(newConvertPlainCmd())
+	cmd.AddCommand(newConvertHelmCmd())
 
 	return cmd
 }
 
-func newConvertPlainCmd(renderOpts *renderOptions) *cobra.Command {
+func newConvertPlainCmd() *cobra.Command {
 	plainOpts := &plainOptions{}
 
 	cmd := &cobra.Command{
@@ -127,7 +102,7 @@ Examples:
   orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators -c config.yaml`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRenderPlain(cmd, args, renderOpts, plainOpts)
+			return runConvertPlain(cmd, args, plainOpts)
 		},
 	}
 
@@ -141,7 +116,7 @@ Examples:
 	return cmd
 }
 
-func newConvertHelmCmd(renderOpts *renderOptions) *cobra.Command {
+func newConvertHelmCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "helm SOURCE DESTINATION",
 		Short: "Convert a bundle to a Helm chart",
@@ -156,14 +131,14 @@ Examples:
   orb bundle convert helm oci:/path/to/layout:latest oci-archive:/tmp/chart.tar`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRenderHelm(cmd, args, renderOpts)
+			return runConvertHelm(cmd, args)
 		},
 	}
 
 	return cmd
 }
 
-func runRenderPlain(cmd *cobra.Command, args []string, renderOpts *renderOptions, plainOpts *plainOptions) error {
+func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions) error {
 	srcRef, err := transport.ParseTransportRef(args[0])
 	if err != nil {
 		return err
@@ -185,13 +160,7 @@ func runRenderPlain(cmd *cobra.Command, args []string, renderOpts *renderOptions
 		return fmt.Errorf("invalid --cert-provider value %q: must be 'cert-manager' or 'service-ca'", plainOpts.certProvider)
 	}
 
-	src, err := source.New(srcRef, source.Options{
-		Username:  renderOpts.srcUsername,
-		Password:  renderOpts.srcPassword,
-		TLSVerify: renderOpts.srcTLSVerify,
-		CertDir:   renderOpts.srcCertDir,
-		NoCreds:   renderOpts.srcNoCreds,
-	})
+	src, err := source.New(srcRef, source.Options{})
 	if err != nil {
 		return err
 	}
@@ -220,11 +189,6 @@ func runRenderPlain(cmd *cobra.Command, args []string, renderOpts *renderOptions
 	}
 
 	dest, err := destination.NewPlain(destRef, destination.Options{
-		Username:   renderOpts.destUsername,
-		Password:   renderOpts.destPassword,
-		TLSVerify:  renderOpts.destTLSVerify,
-		CertDir:    renderOpts.destCertDir,
-		NoCreds:    renderOpts.destNoCreds,
 		Namespace:  plainOpts.namespace,
 		RenderOpts: ropts,
 	})
@@ -242,7 +206,7 @@ func runRenderPlain(cmd *cobra.Command, args []string, renderOpts *renderOptions
 	return dest.Write(ctx, b)
 }
 
-func runRenderHelm(cmd *cobra.Command, args []string, renderOpts *renderOptions) error {
+func runConvertHelm(cmd *cobra.Command, args []string) error {
 	srcRef, err := transport.ParseTransportRef(args[0])
 	if err != nil {
 		return err
@@ -256,24 +220,12 @@ func runRenderHelm(cmd *cobra.Command, args []string, renderOpts *renderOptions)
 		return err
 	}
 
-	src, err := source.New(srcRef, source.Options{
-		Username:  renderOpts.srcUsername,
-		Password:  renderOpts.srcPassword,
-		TLSVerify: renderOpts.srcTLSVerify,
-		CertDir:   renderOpts.srcCertDir,
-		NoCreds:   renderOpts.srcNoCreds,
-	})
+	src, err := source.New(srcRef, source.Options{})
 	if err != nil {
 		return err
 	}
 
-	dest, err := destination.NewHelm(destRef, destination.Options{
-		Username:  renderOpts.destUsername,
-		Password:  renderOpts.destPassword,
-		TLSVerify: renderOpts.destTLSVerify,
-		CertDir:   renderOpts.destCertDir,
-		NoCreds:   renderOpts.destNoCreds,
-	})
+	dest, err := destination.NewHelm(destRef, destination.Options{})
 	if err != nil {
 		return err
 	}
