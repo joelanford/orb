@@ -6,6 +6,72 @@
 
 ## Usage
 
+### Quick start: from catalog to cluster
+
+```sh
+# 1. Add a catalog
+orb catalog add operatorhubio docker://quay.io/operatorhubio/catalog:latest
+
+# 2. Resolve the latest bundle for a package
+orb catalog resolve vault
+
+# 3. Render and apply in one shot
+orb render plain \
+  "$(orb catalog resolve vault -o jsonpath='{.items[0].image}')" \
+  -n operators | kubectl apply -f -
+```
+
+### Catalog management
+
+Add catalogs from OCI images, then resolve bundles from them.
+
+```sh
+# Add a catalog with labels and priority
+orb catalog add operatorhubio docker://quay.io/operatorhubio/catalog:latest \
+  --label env=prod --label tier=community --priority 100
+
+# List configured catalogs (sorted by priority)
+orb catalog list
+
+# Edit labels and priority
+orb catalog edit operatorhubio --label env=staging
+orb catalog edit operatorhubio --remove-label tier --priority 50
+
+# Update catalog content (re-pull from registry)
+orb catalog update operatorhubio
+
+# Remove a catalog
+orb catalog remove operatorhubio
+```
+
+### Resolve
+
+Find matching bundles for a package from configured catalogs. Catalogs are
+searched in priority order; the first catalog containing the package is used.
+All matching bundles are returned, sorted by version descending.
+
+```sh
+# Basic resolve (all versions)
+orb catalog resolve vault
+
+# Filter by channel
+orb catalog resolve vault --channel stable
+
+# Filter by version constraint (Masterminds semver syntax)
+orb catalog resolve vault --version ">=0.4.0, <1.0.0"
+
+# Filter by catalog labels (Kubernetes label selector syntax)
+orb catalog resolve vault -l env=prod,tier=community
+
+# Find upgrade candidates from an installed bundle
+orb catalog resolve vault --installed vault-operator.v0.4.10=0.4.10
+
+# Output as JSON, YAML, or extract fields with JSONPath
+orb catalog resolve vault -o json
+orb catalog resolve vault -o yaml
+orb catalog resolve vault -o jsonpath='{.items[0].image}'
+```
+
 ### Render to plain manifests
 
 ```sh
