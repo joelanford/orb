@@ -1,6 +1,8 @@
-# orb
-
-orb puts OLM's building blocks in your hands — resolve, render, and inspect operator bundles and catalogs, all client-side.
+<div align="center">
+  <img src="assets/logo.svg" width="128" height="128">
+  <h1>orb</h1>
+  <p>Resolve, render, and inspect operator bundles and catalogs, all client-side.</p>
+</div>
 
 ## Usage
 
