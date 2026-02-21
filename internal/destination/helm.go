@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 
 	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/helm"
@@ -43,22 +46,49 @@ type helmDir struct {
 }
 
 func (d *helmDir) Write(_ context.Context, b *bundle.RegistryV1) error {
-	chartFiles, err := helm.Generate(b)
+	c, err := helm.Generate(b)
+	if err != nil {
+		return fmt.Errorf("generating helm chart: %w", err)
+	}
+	return chartutil.SaveDir(c, expandPath(d.ref))
+}
+
+type helmChartArchive struct {
+	ref  string
+	opts Options
+}
+
+func (d *helmChartArchive) Write(_ context.Context, b *bundle.RegistryV1) error {
+	c, err := helm.Generate(b)
 	if err != nil {
 		return fmt.Errorf("generating helm chart: %w", err)
 	}
 
-	dir := expandPath(d.ref)
+	ref := expandPath(d.ref)
 
-	for relPath, content := range chartFiles {
-		fullPath := filepath.Join(dir, relPath)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-			return fmt.Errorf("creating directory for %s: %w", relPath, err)
+	if strings.HasSuffix(ref, ".tgz") {
+		dir := filepath.Dir(ref)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("creating output directory: %w", err)
 		}
-		if err := os.WriteFile(fullPath, content, 0o644); err != nil {
-			return fmt.Errorf("writing %s: %w", relPath, err)
+		// Use a temp dir under the same parent to ensure same-filesystem rename.
+		tmpDir, err := os.MkdirTemp(dir, ".helm-chart-archive-*")
+		if err != nil {
+			return fmt.Errorf("creating temp directory: %w", err)
 		}
+		defer os.RemoveAll(tmpDir)
+
+		archivePath, err := chartutil.Save(c, tmpDir)
+		if err != nil {
+			return fmt.Errorf("saving chart archive: %w", err)
+		}
+		return os.Rename(archivePath, ref)
 	}
 
-	return nil
+	// Treat ref as a directory.
+	if err := os.MkdirAll(ref, 0o755); err != nil {
+		return fmt.Errorf("creating output directory: %w", err)
+	}
+	_, err = chartutil.Save(c, ref)
+	return err
 }
