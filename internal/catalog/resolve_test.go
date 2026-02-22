@@ -14,10 +14,10 @@ import (
 )
 
 // writeFBCCatalog writes a catalog.yaml file in the FBC JSON-lines format
-// at <dir>/configs/<packageName>/catalog.yaml.
+// at <dir>/<packageName>/catalog.yaml.
 func writeFBCCatalog(t *testing.T, dir, packageName string, fbc declcfg.DeclarativeConfig) {
 	t.Helper()
-	catalogDir := filepath.Join(dir, "configs", packageName)
+	catalogDir := filepath.Join(dir, packageName)
 	require.NoError(t, os.MkdirAll(catalogDir, 0o755))
 
 	var lines []byte

@@ -156,6 +156,29 @@ func totalLayerSize(manifestBytes []byte) (int64, error) {
 	return total, nil
 }
 
+// RewritePath returns a filter that rewrites tar entry paths from srcPath to destPath.
+// For example, RewritePath("/configs", "/") rewrites "/configs/foo" to "/foo".
+// Entries not under srcPath are kept unmodified.
+func RewritePath(srcPath, destPath string) LayerFilter {
+	cleanSrc := path.Clean(strings.TrimPrefix(srcPath, "/"))
+	cleanDest := path.Clean(strings.TrimPrefix(destPath, "/"))
+
+	return func(h *tar.Header) (bool, error) {
+		headerPath := path.Clean(strings.TrimPrefix(h.Name, "/"))
+
+		relPath, err := filepath.Rel(cleanSrc, headerPath)
+		if err != nil {
+			return true, nil
+		}
+		if relPath == ".." || strings.HasPrefix(relPath, "../") {
+			return true, nil
+		}
+
+		h.Name = path.Join(cleanDest, relPath)
+		return true, nil
+	}
+}
+
 // ForceOwnershipRWX sets a tar header's Uid and Gid to the current process's
 // Uid and Gid and ensures its permissions give the owner full read/write/execute permission.
 func ForceOwnershipRWX() LayerFilter {

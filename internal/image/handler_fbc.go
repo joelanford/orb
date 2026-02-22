@@ -76,6 +76,7 @@ func (h *FBCHandler) Unpack(ctx context.Context, repo Repository, desc ocispecv1
 	unpacker := &ManifestUnpacker{
 		Filter: CombineFilters(
 			OnlyPaths(configDir),
+			RewritePath(configDir, "/"),
 			ForceOwnershipRWX(),
 		),
 	}

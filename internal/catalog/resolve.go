@@ -83,7 +83,7 @@ func Resolve(cfg *Config, packageName string, opts ResolveOptions) ([]ResolveRes
 			}
 		}
 
-		packageDir := filepath.Join(cat.ContentDir, "configs", packageName)
+		packageDir := filepath.Join(cat.ContentDir, packageName)
 		if _, err := os.Stat(packageDir); errors.Is(err, fs.ErrNotExist) {
 			continue
 		} else if err != nil {
