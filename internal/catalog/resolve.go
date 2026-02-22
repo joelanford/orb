@@ -2,8 +2,11 @@ package catalog
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -65,6 +68,8 @@ func Resolve(cfg *Config, packageName string, opts ResolveOptions) ([]ResolveRes
 		installedVersion = &v
 	}
 
+	ctx := context.Background()
+
 	catalogs := cfg.SortedCatalogs()
 	for _, cat := range catalogs {
 		if selector != nil {
@@ -79,15 +84,18 @@ func Resolve(cfg *Config, packageName string, opts ResolveOptions) ([]ResolveRes
 		}
 
 		packageDir := filepath.Join(cat.ContentDir, "configs", packageName)
-		catalogFile := filepath.Join(packageDir, "catalog.yaml")
-		if _, err := os.Stat(catalogFile); err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, fmt.Errorf("checking catalog file for package %q in catalog %q: %w", packageName, cat.Name, err)
+		if _, err := os.Stat(packageDir); errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("checking package dir for %q in catalog %q: %w", packageName, cat.Name, err)
 		}
 
-		results, err := resolveFromCatalog(cat, packageName, catalogFile, opts.Channels, versionConstraint, opts.InstalledName, installedVersion)
+		fbc, err := declcfg.LoadFS(ctx, os.DirFS(packageDir))
+		if err != nil {
+			return nil, fmt.Errorf("loading FBC for package %q in catalog %q: %w", packageName, cat.Name, err)
+		}
+
+		results, err := resolveFromCatalog(cat, packageName, fbc, opts.Channels, versionConstraint, opts.InstalledName, installedVersion)
 		if err != nil {
 			return nil, fmt.Errorf("catalog %q: %w", cat.Name, err)
 		}
@@ -100,23 +108,12 @@ func Resolve(cfg *Config, packageName string, opts ResolveOptions) ([]ResolveRes
 func resolveFromCatalog(
 	cat Catalog,
 	packageName string,
-	catalogFile string,
+	fbc *declcfg.DeclarativeConfig,
 	channels []string,
 	versionConstraint *semver.Constraints,
 	installedName string,
 	installedVersion *bsemver.Version,
 ) ([]ResolveResult, error) {
-	f, err := os.Open(catalogFile)
-	if err != nil {
-		return nil, fmt.Errorf("opening catalog file: %w", err)
-	}
-	defer f.Close()
-
-	fbc, err := declcfg.LoadReader(f)
-	if err != nil {
-		return nil, fmt.Errorf("loading FBC: %w", err)
-	}
-
 	// Build bundle lookup map
 	bundleMap := make(map[string]declcfg.Bundle)
 	for _, b := range fbc.Bundles {
