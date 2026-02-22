@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"text/tabwriter"
 
 	"github.com/opencontainers/go-digest"
@@ -18,9 +17,10 @@ import (
 	"github.com/vbauerster/mpb/v8/decor"
 	dockerTransport "go.podman.io/image/v5/docker"
 	"go.podman.io/image/v5/types"
-	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/util/jsonpath"
 	"sigs.k8s.io/yaml"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/joelanford/orb/internal/catalog"
 	"github.com/joelanford/orb/internal/image"
@@ -110,6 +110,9 @@ Examples:
 }
 
 func runCatalogEdit(cmd *cobra.Command, name string, opts *catalogEditOptions) error {
+	ctx := cmd.Context()
+	_ = ctx
+
 	configPath, err := catalog.DefaultConfigPath()
 	if err != nil {
 		return err
@@ -165,6 +168,9 @@ func newCatalogListCmd() *cobra.Command {
 }
 
 func runCatalogList(cmd *cobra.Command) error {
+	ctx := cmd.Context()
+	_ = ctx
+
 	configPath, err := catalog.DefaultConfigPath()
 	if err != nil {
 		return err
@@ -220,6 +226,8 @@ If the resolved digest has not changed, the pull is skipped.`,
 }
 
 func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions) error {
+	ctx := cmd.Context()
+
 	tRef, err := transport.ParseRef(ref)
 	if err != nil {
 		return err
@@ -247,8 +255,6 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return err
 	}
 
-	ctx := cmd.Context()
-
 	imgRef, err := dockerTransport.ParseReference("//" + tRef.Ref)
 	if err != nil {
 		return fmt.Errorf("parsing docker reference: %w", err)
@@ -261,6 +267,21 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return fmt.Errorf("creating image client: %w", err)
 	}
 
+	repo, err := image.NewCachingRepository(client)
+	if err != nil {
+		client.Close()
+		return fmt.Errorf("creating caching repository: %w", err)
+	}
+	defer repo.Close()
+
+	resolver := image.NewResolver()
+	resolver.Register(&image.FBCHandler{})
+
+	total, err := resolver.TotalSize(ctx, repo)
+	if err != nil {
+		return fmt.Errorf("computing total size: %w", err)
+	}
+
 	// Progress bar for download feedback.
 	p := mpb.New(mpb.WithOutput(cmd.ErrOrStderr()))
 	bar := p.AddBar(0,
@@ -268,21 +289,11 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 			decor.Name(name, decor.WCSyncSpaceR),
 			decor.Counters(decor.SizeB1024(0), "% .1f / % .1f", decor.WCSyncSpace),
 		),
-		mpb.AppendDecorators(
-			decor.EwmaSpeed(decor.SizeB1024(0), "% .1f", 30),
-		),
 	)
+	bar.SetTotal(total, false)
 
-	progressRepo := image.NewProgressRepository(client, bar)
-
-	repo, err := image.NewCachingRepository(progressRepo)
-	if err != nil {
-		client.Close()
-		bar.Abort(true)
-		p.Wait()
-		return fmt.Errorf("creating caching repository: %w", err)
-	}
-	defer repo.Close()
+	// Set callback AFTER TotalSize so config blob doesn't count toward progress.
+	repo.SetOnBytesRead(func(n int) { bar.IncrBy(n) })
 
 	desc, err := repo.Resolve(ctx)
 	if err != nil {
@@ -291,31 +302,12 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return fmt.Errorf("resolving image: %w", err)
 	}
 
-	// Fetch manifest to compute total download size for the progress bar.
-	manifestBytes, mediaType, err := repo.FetchManifest(ctx, desc)
-	if err != nil {
-		bar.Abort(true)
-		p.Wait()
-		return fmt.Errorf("fetching manifest: %w", err)
-	}
-
-	total, err := image.TotalLayerSize(ctx, repo, desc, manifestBytes, mediaType)
-	if err != nil {
-		bar.Abort(true)
-		p.Wait()
-		return fmt.Errorf("computing total size: %w", err)
-	}
-	bar.SetTotal(total, false)
-
 	contentDir := filepath.Join(cacheDir, name, desc.Digest.Algorithm().String(), desc.Digest.Encoded())
 	if err := os.MkdirAll(contentDir, 0755); err != nil {
 		bar.Abort(true)
 		p.Wait()
 		return fmt.Errorf("creating content directory: %w", err)
 	}
-
-	resolver := image.NewResolver()
-	resolver.Register(&image.FBCHandler{})
 
 	if err := resolver.Unpack(ctx, repo, contentDir); err != nil {
 		os.RemoveAll(contentDir)
@@ -348,6 +340,9 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 }
 
 func runCatalogRemove(cmd *cobra.Command, name string) error {
+	ctx := cmd.Context()
+	_ = ctx
+
 	configPath, err := catalog.DefaultConfigPath()
 	if err != nil {
 		return err
@@ -379,17 +374,9 @@ func runCatalogRemove(cmd *cobra.Command, name string) error {
 	return nil
 }
 
-// catalogUpdateResult holds the outcome of a single catalog update goroutine.
-type catalogUpdateResult struct {
-	name          string
-	digest        digest.Digest
-	newContentDir string
-	oldContentDir string
-	upToDate      bool
-	err           error
-}
-
 func runCatalogUpdate(cmd *cobra.Command, name string) error {
+	ctx := cmd.Context()
+
 	configPath, err := catalog.DefaultConfigPath()
 	if err != nil {
 		return err
@@ -417,191 +404,189 @@ func runCatalogUpdate(cmd *cobra.Command, name string) error {
 		}
 	}
 
-	ctx := cmd.Context()
+	const numWorkers = 3
 
-	// Create progress bar container (renders to stderr).
-	p := mpb.New(mpb.WithOutput(cmd.ErrOrStderr()))
+	// ── Phase 1: Resolve refs and check freshness ──────────────────────
+	type resolvedCatalog struct {
+		name              string
+		digest            digest.Digest
+		newContentDir     string
+		currentContentDir string
+		upToDate          bool
+		cachingRepo       *image.CachingRepository
+		err               error
+	}
 
-	// Results slice — one entry per catalog, indexed by position.
-	results := make([]catalogUpdateResult, len(toUpdate))
+	resolved := make([]resolvedCatalog, len(toUpdate))
 
-	var g errgroup.Group
-	var mu sync.Mutex // protects cfg mutations
-
-	for i, catName := range toUpdate {
-		catName := catName
-		idx := i
-
-		// Read catalog config under lock (pointer may be shared).
-		mu.Lock()
+	resolveGroup, resolveCtx := errgroup.WithContext(ctx)
+	resolveGroup.SetLimit(numWorkers)
+	for idx, catName := range toUpdate {
 		cat, _ := cfg.Get(catName)
-		currentContentDir := cat.ContentDir
-		ref := cat.Ref
-		mu.Unlock()
-
-		// Create a progress bar for this catalog.
-		bar := p.AddBar(0,
-			mpb.PrependDecorators(
-				decor.Name(catName, decor.WCSyncSpaceR),
-				decor.Counters(decor.SizeB1024(0), "% .1f / % .1f", decor.WCSyncSpace),
-			),
-			mpb.AppendDecorators(
-				decor.EwmaSpeed(decor.SizeB1024(0), "% .1f", 30),
-			),
-		)
-
-		g.Go(func() error {
-			res := &results[idx]
+		resolveGroup.Go(func() error {
+			res := &resolved[idx]
 			res.name = catName
+			res.currentContentDir = cat.ContentDir
 
-			tRef, err := transport.ParseRef(ref)
+			tRef, err := transport.ParseRef(cat.Ref)
 			if err != nil {
 				res.err = fmt.Errorf("catalog %q: %w", catName, err)
-				bar.Abort(true)
 				return nil
 			}
 
 			imgRef, err := dockerTransport.ParseReference("//" + tRef.Ref)
 			if err != nil {
 				res.err = fmt.Errorf("catalog %q: parsing docker reference: %w", catName, err)
-				bar.Abort(true)
 				return nil
 			}
 
 			sysCtx := &types.SystemContext{}
 
-			client, err := image.NewContainersImageClient(ctx, imgRef, sysCtx)
+			client, err := image.NewContainersImageClient(resolveCtx, imgRef, sysCtx)
 			if err != nil {
 				res.err = fmt.Errorf("catalog %q: creating image client: %w", catName, err)
-				bar.Abort(true)
 				return nil
 			}
 
-			// Wrap: ContainersImageClient → ProgressRepository → CachingRepository
-			progressRepo := image.NewProgressRepository(client, bar)
-
-			repo, err := image.NewCachingRepository(progressRepo)
+			cachingRepo, err := image.NewCachingRepository(client)
 			if err != nil {
 				client.Close()
 				res.err = fmt.Errorf("catalog %q: creating caching repository: %w", catName, err)
-				bar.Abort(true)
 				return nil
 			}
-			defer repo.Close()
 
-			desc, err := repo.Resolve(ctx)
+			desc, err := cachingRepo.Resolve(resolveCtx)
 			if err != nil {
+				cachingRepo.Close()
 				res.err = fmt.Errorf("catalog %q: resolving image: %w", catName, err)
-				bar.Abort(true)
 				return nil
 			}
+
 			res.digest = desc.Digest
+			res.newContentDir = filepath.Join(cacheDir, catName, desc.Digest.Algorithm().String(), desc.Digest.Encoded())
 
-			newContentDir := filepath.Join(cacheDir, catName, desc.Digest.Algorithm().String(), desc.Digest.Encoded())
-			if newContentDir == currentContentDir {
-				res.upToDate = true
-				bar.Abort(true)
-				return nil
+			if res.newContentDir == cat.ContentDir {
+				if _, err := os.Stat(res.newContentDir); err == nil {
+					res.upToDate = true
+					cachingRepo.Close()
+					return nil
+				}
 			}
 
-			// Fetch manifest via the client directly (not the CachingRepository)
-			// to compute total download size. This avoids polluting the cache,
-			// which would cause resolver.Unpack to receive a media type from
-			// Fetch manifest to compute total download size.
-			manifestBytes, mediaType, err := repo.FetchManifest(ctx, desc)
-			if err != nil {
-				res.err = fmt.Errorf("catalog %q: fetching manifest: %w", catName, err)
-				bar.Abort(true)
-				return nil
+			// Keep cachingRepo open for phase 2.
+			res.cachingRepo = cachingRepo
+			return nil
+		})
+	}
+	if err := resolveGroup.Wait(); err != nil {
+		for i := range resolved {
+			if resolved[i].cachingRepo != nil {
+				resolved[i].cachingRepo.Close()
 			}
+		}
+		return err
+	}
 
-			total, err := image.TotalLayerSize(ctx, repo, desc, manifestBytes, mediaType)
+	// ── Phase 2: Download out-of-date catalogs ─────────────────────────
+	p := mpb.New(mpb.WithOutput(cmd.ErrOrStderr()))
+
+	// Create all progress bars upfront so they render together.
+	type downloadTarget struct {
+		idx int
+		bar *mpb.Bar
+	}
+	var targets []downloadTarget
+	for i := range resolved {
+		res := &resolved[i]
+		if res.err != nil || res.upToDate {
+			continue
+		}
+		bar := p.AddBar(0,
+			mpb.PrependDecorators(
+				decor.Name(res.name, decor.WCSyncSpaceR),
+				decor.Counters(decor.SizeB1024(0), "% .1f / % .1f", decor.WCSyncSpace),
+			),
+		)
+		targets = append(targets, downloadTarget{idx: i, bar: bar})
+	}
+
+	unpackGroup, unpackCtx := errgroup.WithContext(ctx)
+	unpackGroup.SetLimit(numWorkers)
+	for _, t := range targets {
+		unpackGroup.Go(func() error {
+			res := &resolved[t.idx]
+			bar := t.bar
+			defer res.cachingRepo.Close()
+
+			resolver := image.NewResolver()
+			resolver.Register(&image.FBCHandler{})
+
+			total, err := resolver.TotalSize(unpackCtx, res.cachingRepo)
 			if err != nil {
-				res.err = fmt.Errorf("catalog %q: computing total size: %w", catName, err)
+				res.err = fmt.Errorf("catalog %q: computing total size: %w", res.name, err)
 				bar.Abort(true)
 				return nil
 			}
 			bar.SetTotal(total, false)
 
-			if err := os.MkdirAll(newContentDir, 0755); err != nil {
-				res.err = fmt.Errorf("catalog %q: creating content directory: %w", catName, err)
+			res.cachingRepo.SetOnBytesRead(func(n int) { bar.IncrBy(n) })
+
+			if err := os.MkdirAll(res.newContentDir, 0755); err != nil {
+				res.err = fmt.Errorf("catalog %q: creating content directory: %w", res.name, err)
 				bar.Abort(true)
 				return nil
 			}
 
-			resolver := image.NewResolver()
-			resolver.Register(&image.FBCHandler{})
-
-			if err := resolver.Unpack(ctx, repo, newContentDir); err != nil {
-				os.RemoveAll(newContentDir)
-				res.err = fmt.Errorf("catalog %q: unpacking catalog: %w", catName, err)
+			if err := resolver.Unpack(unpackCtx, res.cachingRepo, res.newContentDir); err != nil {
+				os.RemoveAll(res.newContentDir)
+				res.err = fmt.Errorf("catalog %q: unpacking catalog: %w", res.name, err)
 				bar.Abort(true)
 				return nil
 			}
 
-			bar.SetTotal(total, true) // mark bar as complete
+			// Save config immediately so a subsequent run won't re-pull
+			// this catalog if a later catalog fails.
+			if err := cfg.UpdateAndSave(res.name, configPath, func(cat *catalog.Catalog) {
+				cat.ContentDir = res.newContentDir
+			}); err != nil {
+				os.RemoveAll(res.newContentDir)
+				res.err = fmt.Errorf("catalog %q: saving config: %w", res.name, err)
+				bar.Abort(true)
+				return nil
+			}
+			if res.currentContentDir != "" && res.currentContentDir != res.newContentDir {
+				os.RemoveAll(res.currentContentDir)
+			}
 
-			res.newContentDir = newContentDir
-			res.oldContentDir = currentContentDir
+			bar.SetTotal(total, true)
 			return nil
 		})
 	}
-
-	// Wait for all goroutines, then let progress bars finish rendering.
-	_ = g.Wait() // errors are collected per-result, not returned here
+	if err := unpackGroup.Wait(); err != nil {
+		p.Wait()
+		return err
+	}
 	p.Wait()
 
-	// Apply successful results to config.
-	var (
-		allErrors     []error
-		configChanged bool
-	)
-	for i := range results {
-		res := &results[i]
+	// ── Phase 3: Report results ────────────────────────────────────────
+	var allErrors []error
+	for i := range resolved {
+		res := &resolved[i]
 		if res.err != nil {
 			allErrors = append(allErrors, res.err)
-			continue
-		}
-		if res.upToDate {
-			continue
-		}
-		cat, ok := cfg.Get(res.name)
-		if !ok {
-			continue
-		}
-		cat.ContentDir = res.newContentDir
-		configChanged = true
-	}
-
-	// Save config once if anything changed.
-	if configChanged {
-		if err := cfg.Save(configPath); err != nil {
-			return err
 		}
 	}
 
-	// Clean up old content dirs only after config is saved.
-	for i := range results {
-		res := &results[i]
-		if res.err != nil || res.upToDate {
-			continue
-		}
-		if res.oldContentDir != "" {
-			os.RemoveAll(res.oldContentDir)
-		}
-	}
-
-	// Print final status lines to stdout.
 	out := cmd.OutOrStdout()
-	for i := range results {
-		res := &results[i]
+	for i := range resolved {
+		res := &resolved[i]
 		if res.err != nil {
-			continue // reported via errors.Join below
+			continue
 		}
 		if res.upToDate {
-			fmt.Fprintf(out, "Catalog %q is up to date (%s)\n", res.name, res.digest)
+			fmt.Fprintf(out, "Catalog %q is up-to-date (%s)\n", res.name, res.digest)
 		} else {
-			fmt.Fprintf(out, "Updated catalog %q (%s)\n", res.name, res.digest)
+			fmt.Fprintf(out, "Catalog %q updated (%s)\n", res.name, res.digest)
 		}
 	}
 
@@ -659,6 +644,9 @@ Examples:
 }
 
 func runCatalogResolve(cmd *cobra.Command, packageName string, opts *catalogResolveOptions) error {
+	ctx := cmd.Context()
+	_ = ctx
+
 	configPath, err := catalog.DefaultConfigPath()
 	if err != nil {
 		return err

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 )
 
 // Catalog represents a single catalog entry in the config file.
@@ -21,6 +22,7 @@ type Catalog struct {
 
 // Config holds the list of configured catalogs.
 type Config struct {
+	mu       sync.Mutex
 	Catalogs []Catalog `json:"catalogs"`
 }
 
@@ -60,9 +62,15 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// Save writes the config to the given path atomically, creating parent
-// directories as needed.
+// Save writes the config to the given path, creating parent
+// directories as needed. It is safe for concurrent use.
 func (c *Config) Save(path string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.save(path)
+}
+
+func (c *Config) save(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
@@ -75,6 +83,22 @@ func (c *Config) Save(path string) error {
 
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("writing config: %w", err)
+	}
+	return nil
+}
+
+// UpdateAndSave atomically updates a catalog entry by name and saves
+// the config to the given path. The update function receives a pointer
+// to the catalog entry and may modify it. If the named catalog is not
+// found, no save occurs and nil is returned. It is safe for concurrent use.
+func (c *Config) UpdateAndSave(name, path string, fn func(*Catalog)) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.Catalogs {
+		if c.Catalogs[i].Name == name {
+			fn(&c.Catalogs[i])
+			return c.save(path)
+		}
 	}
 	return nil
 }

@@ -42,6 +42,10 @@ func (h *RegistryV1Handler) Matches(ctx context.Context, repo Repository, desc o
 	return ok && mediaType == BundleMediaTypeRegistryV1
 }
 
+func (h *RegistryV1Handler) TotalSize(_ context.Context, _ Repository, _ ocispecv1.Descriptor, manifestBytes []byte) (int64, error) {
+	return totalLayerSize(manifestBytes)
+}
+
 func (h *RegistryV1Handler) Unpack(ctx context.Context, repo Repository, _ ocispecv1.Descriptor, manifestBytes []byte, dest string) error {
 	cfg, err := FetchImageConfig(ctx, repo, manifestBytes)
 	if err != nil {

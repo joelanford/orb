@@ -44,6 +44,17 @@ func (h *FBCHandler) Matches(ctx context.Context, repo Repository, desc ocispecv
 	return ok
 }
 
+func (h *FBCHandler) TotalSize(ctx context.Context, repo Repository, desc ocispecv1.Descriptor, manifestBytes []byte) (int64, error) {
+	if IsIndex(desc.MediaType) {
+		_, platformManifestBytes, err := resolvePlatformManifest(ctx, repo, manifestBytes, desc.MediaType)
+		if err != nil {
+			return 0, fmt.Errorf("resolving platform manifest: %w", err)
+		}
+		manifestBytes = platformManifestBytes
+	}
+	return totalLayerSize(manifestBytes)
+}
+
 func (h *FBCHandler) Unpack(ctx context.Context, repo Repository, desc ocispecv1.Descriptor, manifestBytes []byte, dest string) error {
 	// If this is a manifest list/index, resolve to the platform-specific manifest first
 	if IsIndex(desc.MediaType) {

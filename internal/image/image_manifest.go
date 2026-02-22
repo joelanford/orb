@@ -142,6 +142,20 @@ func OnlyPaths(paths ...string) LayerFilter {
 	}
 }
 
+// totalLayerSize computes the total compressed layer size from manifest bytes.
+func totalLayerSize(manifestBytes []byte) (int64, error) {
+	var m ocispecv1.Manifest
+	if err := json.Unmarshal(manifestBytes, &m); err != nil {
+		return 0, fmt.Errorf("parsing manifest: %w", err)
+	}
+
+	var total int64
+	for _, layer := range m.Layers {
+		total += layer.Size
+	}
+	return total, nil
+}
+
 // ForceOwnershipRWX sets a tar header's Uid and Gid to the current process's
 // Uid and Gid and ensures its permissions give the owner full read/write/execute permission.
 func ForceOwnershipRWX() LayerFilter {
