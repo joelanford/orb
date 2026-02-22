@@ -3,16 +3,22 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/tabwriter"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
+	"github.com/vbauerster/mpb/v8"
+	"github.com/vbauerster/mpb/v8/decor"
 	dockerTransport "go.podman.io/image/v5/docker"
 	"go.podman.io/image/v5/types"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/util/jsonpath"
 	"sigs.k8s.io/yaml"
 
@@ -255,20 +261,56 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return fmt.Errorf("creating image client: %w", err)
 	}
 
-	repo, err := image.NewCachingRepository(client)
+	// Progress bar for download feedback.
+	p := mpb.New(mpb.WithOutput(cmd.ErrOrStderr()))
+	bar := p.AddBar(0,
+		mpb.PrependDecorators(
+			decor.Name(name, decor.WCSyncSpaceR),
+			decor.Counters(decor.SizeB1024(0), "% .1f / % .1f", decor.WCSyncSpace),
+		),
+		mpb.AppendDecorators(
+			decor.EwmaSpeed(decor.SizeB1024(0), "% .1f", 30),
+		),
+	)
+
+	progressRepo := image.NewProgressRepository(client, bar)
+
+	repo, err := image.NewCachingRepository(progressRepo)
 	if err != nil {
 		client.Close()
+		bar.Abort(true)
+		p.Wait()
 		return fmt.Errorf("creating caching repository: %w", err)
 	}
 	defer repo.Close()
 
 	desc, err := repo.Resolve(ctx)
 	if err != nil {
+		bar.Abort(true)
+		p.Wait()
 		return fmt.Errorf("resolving image: %w", err)
 	}
 
+	// Fetch manifest to compute total download size for the progress bar.
+	manifestBytes, mediaType, err := repo.FetchManifest(ctx, desc)
+	if err != nil {
+		bar.Abort(true)
+		p.Wait()
+		return fmt.Errorf("fetching manifest: %w", err)
+	}
+
+	total, err := image.TotalLayerSize(ctx, repo, desc, manifestBytes, mediaType)
+	if err != nil {
+		bar.Abort(true)
+		p.Wait()
+		return fmt.Errorf("computing total size: %w", err)
+	}
+	bar.SetTotal(total, false)
+
 	contentDir := filepath.Join(cacheDir, name, desc.Digest.Algorithm().String(), desc.Digest.Encoded())
 	if err := os.MkdirAll(contentDir, 0755); err != nil {
+		bar.Abort(true)
+		p.Wait()
 		return fmt.Errorf("creating content directory: %w", err)
 	}
 
@@ -277,8 +319,13 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 
 	if err := resolver.Unpack(ctx, repo, contentDir); err != nil {
 		os.RemoveAll(contentDir)
+		bar.Abort(true)
+		p.Wait()
 		return fmt.Errorf("unpacking catalog: %w", err)
 	}
+
+	bar.SetTotal(total, true)
+	p.Wait()
 
 	if err := cfg.Add(catalog.Catalog{
 		Name:       name,
@@ -332,6 +379,16 @@ func runCatalogRemove(cmd *cobra.Command, name string) error {
 	return nil
 }
 
+// catalogUpdateResult holds the outcome of a single catalog update goroutine.
+type catalogUpdateResult struct {
+	name          string
+	digest        digest.Digest
+	newContentDir string
+	oldContentDir string
+	upToDate      bool
+	err           error
+}
+
 func runCatalogUpdate(cmd *cobra.Command, name string) error {
 	configPath, err := catalog.DefaultConfigPath()
 	if err != nil {
@@ -362,75 +419,193 @@ func runCatalogUpdate(cmd *cobra.Command, name string) error {
 
 	ctx := cmd.Context()
 
-	for _, catName := range toUpdate {
+	// Create progress bar container (renders to stderr).
+	p := mpb.New(mpb.WithOutput(cmd.ErrOrStderr()))
+
+	// Results slice — one entry per catalog, indexed by position.
+	results := make([]catalogUpdateResult, len(toUpdate))
+
+	var g errgroup.Group
+	var mu sync.Mutex // protects cfg mutations
+
+	for i, catName := range toUpdate {
+		catName := catName
+		idx := i
+
+		// Read catalog config under lock (pointer may be shared).
+		mu.Lock()
 		cat, _ := cfg.Get(catName)
+		currentContentDir := cat.ContentDir
+		ref := cat.Ref
+		mu.Unlock()
 
-		tRef, err := transport.ParseRef(cat.Ref)
-		if err != nil {
-			return fmt.Errorf("catalog %q: %w", catName, err)
-		}
+		// Create a progress bar for this catalog.
+		bar := p.AddBar(0,
+			mpb.PrependDecorators(
+				decor.Name(catName, decor.WCSyncSpaceR),
+				decor.Counters(decor.SizeB1024(0), "% .1f / % .1f", decor.WCSyncSpace),
+			),
+			mpb.AppendDecorators(
+				decor.EwmaSpeed(decor.SizeB1024(0), "% .1f", 30),
+			),
+		)
 
-		imgRef, err := dockerTransport.ParseReference("//" + tRef.Ref)
-		if err != nil {
-			return fmt.Errorf("catalog %q: parsing docker reference: %w", catName, err)
-		}
+		g.Go(func() error {
+			res := &results[idx]
+			res.name = catName
 
-		sysCtx := &types.SystemContext{}
+			tRef, err := transport.ParseRef(ref)
+			if err != nil {
+				res.err = fmt.Errorf("catalog %q: %w", catName, err)
+				bar.Abort(true)
+				return nil
+			}
 
-		client, err := image.NewContainersImageClient(ctx, imgRef, sysCtx)
-		if err != nil {
-			return fmt.Errorf("catalog %q: creating image client: %w", catName, err)
-		}
+			imgRef, err := dockerTransport.ParseReference("//" + tRef.Ref)
+			if err != nil {
+				res.err = fmt.Errorf("catalog %q: parsing docker reference: %w", catName, err)
+				bar.Abort(true)
+				return nil
+			}
 
-		repo, err := image.NewCachingRepository(client)
-		if err != nil {
-			client.Close()
-			return fmt.Errorf("catalog %q: creating caching repository: %w", catName, err)
-		}
+			sysCtx := &types.SystemContext{}
 
-		desc, err := repo.Resolve(ctx)
-		if err != nil {
-			repo.Close()
-			return fmt.Errorf("catalog %q: resolving image: %w", catName, err)
-		}
+			client, err := image.NewContainersImageClient(ctx, imgRef, sysCtx)
+			if err != nil {
+				res.err = fmt.Errorf("catalog %q: creating image client: %w", catName, err)
+				bar.Abort(true)
+				return nil
+			}
 
-		newContentDir := filepath.Join(cacheDir, catName, desc.Digest.Algorithm().String(), desc.Digest.Encoded())
-		if newContentDir == cat.ContentDir {
-			repo.Close()
-			fmt.Fprintf(cmd.OutOrStdout(), "Catalog %q is up to date (%s)\n", catName, desc.Digest)
-			continue
-		}
+			// Wrap: ContainersImageClient → ProgressRepository → CachingRepository
+			progressRepo := image.NewProgressRepository(client, bar)
 
-		if err := os.MkdirAll(newContentDir, 0755); err != nil {
-			repo.Close()
-			return fmt.Errorf("catalog %q: creating content directory: %w", catName, err)
-		}
+			repo, err := image.NewCachingRepository(progressRepo)
+			if err != nil {
+				client.Close()
+				res.err = fmt.Errorf("catalog %q: creating caching repository: %w", catName, err)
+				bar.Abort(true)
+				return nil
+			}
+			defer repo.Close()
 
-		resolver := image.NewResolver()
-		resolver.Register(&image.FBCHandler{})
+			desc, err := repo.Resolve(ctx)
+			if err != nil {
+				res.err = fmt.Errorf("catalog %q: resolving image: %w", catName, err)
+				bar.Abort(true)
+				return nil
+			}
+			res.digest = desc.Digest
 
-		if err := resolver.Unpack(ctx, repo, newContentDir); err != nil {
-			repo.Close()
-			os.RemoveAll(newContentDir)
-			return fmt.Errorf("catalog %q: unpacking catalog: %w", catName, err)
-		}
-		repo.Close()
+			newContentDir := filepath.Join(cacheDir, catName, desc.Digest.Algorithm().String(), desc.Digest.Encoded())
+			if newContentDir == currentContentDir {
+				res.upToDate = true
+				bar.Abort(true)
+				return nil
+			}
 
-		oldContentDir := cat.ContentDir
-		cat.ContentDir = newContentDir
+			// Fetch manifest via the client directly (not the CachingRepository)
+			// to compute total download size. This avoids polluting the cache,
+			// which would cause resolver.Unpack to receive a media type from
+			// Fetch manifest to compute total download size.
+			manifestBytes, mediaType, err := repo.FetchManifest(ctx, desc)
+			if err != nil {
+				res.err = fmt.Errorf("catalog %q: fetching manifest: %w", catName, err)
+				bar.Abort(true)
+				return nil
+			}
 
-		if err := cfg.Save(configPath); err != nil {
-			return fmt.Errorf("catalog %q: saving config: %w", catName, err)
-		}
+			total, err := image.TotalLayerSize(ctx, repo, desc, manifestBytes, mediaType)
+			if err != nil {
+				res.err = fmt.Errorf("catalog %q: computing total size: %w", catName, err)
+				bar.Abort(true)
+				return nil
+			}
+			bar.SetTotal(total, false)
 
-		if oldContentDir != "" {
-			os.RemoveAll(oldContentDir)
-		}
+			if err := os.MkdirAll(newContentDir, 0755); err != nil {
+				res.err = fmt.Errorf("catalog %q: creating content directory: %w", catName, err)
+				bar.Abort(true)
+				return nil
+			}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Updated catalog %q (%s)\n", catName, desc.Digest)
+			resolver := image.NewResolver()
+			resolver.Register(&image.FBCHandler{})
+
+			if err := resolver.Unpack(ctx, repo, newContentDir); err != nil {
+				os.RemoveAll(newContentDir)
+				res.err = fmt.Errorf("catalog %q: unpacking catalog: %w", catName, err)
+				bar.Abort(true)
+				return nil
+			}
+
+			bar.SetTotal(total, true) // mark bar as complete
+
+			res.newContentDir = newContentDir
+			res.oldContentDir = currentContentDir
+			return nil
+		})
 	}
 
-	return nil
+	// Wait for all goroutines, then let progress bars finish rendering.
+	_ = g.Wait() // errors are collected per-result, not returned here
+	p.Wait()
+
+	// Apply successful results to config.
+	var (
+		allErrors     []error
+		configChanged bool
+	)
+	for i := range results {
+		res := &results[i]
+		if res.err != nil {
+			allErrors = append(allErrors, res.err)
+			continue
+		}
+		if res.upToDate {
+			continue
+		}
+		cat, ok := cfg.Get(res.name)
+		if !ok {
+			continue
+		}
+		cat.ContentDir = res.newContentDir
+		configChanged = true
+	}
+
+	// Save config once if anything changed.
+	if configChanged {
+		if err := cfg.Save(configPath); err != nil {
+			return err
+		}
+	}
+
+	// Clean up old content dirs only after config is saved.
+	for i := range results {
+		res := &results[i]
+		if res.err != nil || res.upToDate {
+			continue
+		}
+		if res.oldContentDir != "" {
+			os.RemoveAll(res.oldContentDir)
+		}
+	}
+
+	// Print final status lines to stdout.
+	out := cmd.OutOrStdout()
+	for i := range results {
+		res := &results[i]
+		if res.err != nil {
+			continue // reported via errors.Join below
+		}
+		if res.upToDate {
+			fmt.Fprintf(out, "Catalog %q is up to date (%s)\n", res.name, res.digest)
+		} else {
+			fmt.Fprintf(out, "Updated catalog %q (%s)\n", res.name, res.digest)
+		}
+	}
+
+	return errors.Join(allErrors...)
 }
 
 type catalogResolveOptions struct {
