@@ -722,13 +722,10 @@ func printResolveResults(out io.Writer, results []catalog.ResolveResult, format 
 		return err
 	case format == "":
 		w := newTabWriter(out)
-		fmt.Fprintln(w, "CATALOG\tPACKAGE\tCHANNELS\tBUNDLE\tVERSION\tIMAGE")
+		fmt.Fprintln(w, "CATALOG\tVERSION\tIMAGE")
 		for _, r := range results {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			fmt.Fprintf(w, "%s\t%s\t%s\n",
 				r.CatalogName,
-				r.PackageName,
-				r.ChannelsString(),
-				r.BundleName,
 				r.Version,
 				r.Image,
 			)
