@@ -43,6 +43,15 @@ type CachingRepository struct {
 
 	// Parsed content cache
 	resolution *ocispecv1.Descriptor
+
+	// Optional callback invoked on each Read with the number of bytes read.
+	onBytesRead func(int)
+}
+
+// SetOnBytesRead sets a callback that is invoked with the number of bytes
+// read on each Read from a blob returned by FetchBlob.
+func (s *CachingRepository) SetOnBytesRead(fn func(int)) {
+	s.onBytesRead = fn
 }
 
 // NewCachingRepository creates a CachingRepository that caches fetched content locally.
@@ -116,19 +125,26 @@ func (s *CachingRepository) FetchBlob(ctx context.Context, desc ocispecv1.Descri
 	blobDir := s.blobsDir()
 	blobPath := filepath.Join(blobDir, desc.Digest.String())
 
-	// Check cache
+	// Cache hit — wrap with callback so progress is reported (at disk speed)
 	if f, err := os.Open(blobPath); err == nil {
-		return f, nil
+		return s.wrapReader(f), nil
 	}
 
-	// Fetch and cache
+	// Cache miss — wrap inner reader for progress during io.Copy (at network speed)
 	reader, err := s.inner.FetchBlob(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
 
-	f, err := s.cacheFile(blobPath, reader)
+	f, err := s.cacheFile(blobPath, s.wrapReader(reader))
 	return f, errors.Join(err, reader.Close())
+}
+
+func (s *CachingRepository) wrapReader(rc io.ReadCloser) io.ReadCloser {
+	if s.onBytesRead == nil {
+		return rc
+	}
+	return &callbackReadCloser{rc: rc, onRead: s.onBytesRead}
 }
 
 func (s *CachingRepository) cacheFile(path string, reader io.Reader) (*os.File, error) {
@@ -146,6 +162,25 @@ func (s *CachingRepository) cacheFile(path string, reader io.Reader) (*os.File, 
 		return nil, err
 	}
 	return os.Open(path)
+}
+
+// callbackReadCloser wraps an io.ReadCloser and invokes onRead with the
+// number of bytes read on each Read call.
+type callbackReadCloser struct {
+	rc     io.ReadCloser
+	onRead func(int)
+}
+
+func (cr *callbackReadCloser) Read(p []byte) (int, error) {
+	n, err := cr.rc.Read(p)
+	if n > 0 && cr.onRead != nil {
+		cr.onRead(n)
+	}
+	return n, err
+}
+
+func (cr *callbackReadCloser) Close() error {
+	return cr.rc.Close()
 }
 
 // ParseContent parses raw manifest bytes into a Content struct.
@@ -202,6 +237,9 @@ type Handler interface {
 	// Matches returns true if this handler can handle the content.
 	Matches(ctx context.Context, repo Repository, desc ocispecv1.Descriptor, manifestBytes []byte) bool
 
+	// TotalSize returns the total compressed size of the blobs that will be fetched during Unpack.
+	TotalSize(ctx context.Context, repo Repository, desc ocispecv1.Descriptor, manifestBytes []byte) (int64, error)
+
 	// Unpack processes the content and writes the unpacked content to dest.
 	Unpack(ctx context.Context, repo Repository, desc ocispecv1.Descriptor, manifestBytes []byte, dest string) error
 }
@@ -222,19 +260,35 @@ func (r *Resolver) Register(h Handler) {
 	r.handlers = append(r.handlers, h)
 }
 
+// TotalSize resolves the content and returns the total compressed size
+// of the blobs that will be fetched during Unpack, as determined by the
+// first matching handler.
+func (r *Resolver) TotalSize(ctx context.Context, repo Repository) (int64, error) {
+	desc, manifestBytes, err := r.resolve(ctx, repo)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, handler := range r.handlers {
+		if handler.Matches(ctx, repo, desc, manifestBytes) {
+			total, err := handler.TotalSize(ctx, repo, desc, manifestBytes)
+			if err != nil {
+				return 0, fmt.Errorf("handler %s: %w", handler.Name(), err)
+			}
+			return total, nil
+		}
+	}
+
+	return 0, fmt.Errorf("no handler matched content (mediaType=%s, digest=%s)", desc.MediaType, desc.Digest)
+}
+
 // Unpack finds the first matching handler and unpacks content to the destination.
 // The caller is responsible for creating and closing the session.
 func (r *Resolver) Unpack(ctx context.Context, repo Repository, dest string) error {
-	desc, err := repo.Resolve(ctx)
+	desc, manifestBytes, err := r.resolve(ctx, repo)
 	if err != nil {
 		return err
 	}
-
-	manifestBytes, mediaType, err := repo.FetchManifest(ctx, desc)
-	if err != nil {
-		return err
-	}
-	desc.MediaType = mediaType
 
 	for _, handler := range r.handlers {
 		if handler.Matches(ctx, repo, desc, manifestBytes) {
@@ -245,5 +299,20 @@ func (r *Resolver) Unpack(ctx context.Context, repo Repository, dest string) err
 		}
 	}
 
-	return fmt.Errorf("no handler matched content (mediaType=%s, digest=%s)", mediaType, desc.Digest)
+	return fmt.Errorf("no handler matched content (mediaType=%s, digest=%s)", desc.MediaType, desc.Digest)
+}
+
+func (r *Resolver) resolve(ctx context.Context, repo Repository) (ocispecv1.Descriptor, []byte, error) {
+	desc, err := repo.Resolve(ctx)
+	if err != nil {
+		return ocispecv1.Descriptor{}, nil, err
+	}
+
+	manifestBytes, mediaType, err := repo.FetchManifest(ctx, desc)
+	if err != nil {
+		return ocispecv1.Descriptor{}, nil, err
+	}
+	desc.MediaType = mediaType
+
+	return desc, manifestBytes, nil
 }

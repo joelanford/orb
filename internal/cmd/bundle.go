@@ -137,6 +137,8 @@ Examples:
 }
 
 func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions) error {
+	ctx := cmd.Context()
+
 	srcRef, err := transport.ParseRef(args[0])
 	if err != nil {
 		return err
@@ -194,8 +196,6 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 		return err
 	}
 
-	ctx := cmd.Context()
-
 	b, err := src.Read(ctx)
 	if err != nil {
 		return err
@@ -205,6 +205,8 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 }
 
 func runConvertHelm(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	srcRef, err := transport.ParseRef(args[0])
 	if err != nil {
 		return err
@@ -227,8 +229,6 @@ func runConvertHelm(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	ctx := cmd.Context()
 
 	b, err := src.Read(ctx)
 	if err != nil {

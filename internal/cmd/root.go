@@ -1,6 +1,12 @@
 package cmd
 
-import "github.com/spf13/cobra"
+import (
+	"context"
+	"os/signal"
+	"syscall"
+
+	"github.com/spf13/cobra"
+)
 
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -15,5 +21,7 @@ func newRootCmd() *cobra.Command {
 }
 
 func Execute() error {
-	return newRootCmd().Execute()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+	return newRootCmd().ExecuteContext(ctx)
 }
