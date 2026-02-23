@@ -96,8 +96,20 @@ func TestHelmOCIArchive_Write_NotImplemented(t *testing.T) {
 	assert.Contains(t, err.Error(), "not yet implemented")
 }
 
-func TestPlainDir_Write(t *testing.T) {
+func TestPlainDir_Write_FailsIfExists(t *testing.T) {
 	dir := t.TempDir()
+	d := &plainDir{
+		ref:  dir,
+		opts: Options{Namespace: "test-ns"},
+	}
+
+	err := d.Write(context.Background(), minimalBundle())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+}
+
+func TestPlainDir_Write(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "output")
 	b := minimalBundle()
 	d := &plainDir{
 		ref: dir,
@@ -113,8 +125,17 @@ func TestPlainDir_Write(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestHelmDir_Write(t *testing.T) {
+func TestHelmDir_Write_FailsIfExists(t *testing.T) {
 	dir := t.TempDir()
+	d := &helmDir{ref: dir}
+
+	err := d.Write(context.Background(), minimalBundle())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+}
+
+func TestHelmDir_Write(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "output")
 	b := minimalBundle()
 	d := &helmDir{
 		ref: dir,
@@ -123,8 +144,28 @@ func TestHelmDir_Write(t *testing.T) {
 	err := d.Write(context.Background(), b)
 	require.NoError(t, err)
 
-	_, err = os.Stat(filepath.Join(dir, b.PackageName, "Chart.yaml"))
+	// Chart.yaml should be directly in the output dir, not in a subdirectory.
+	_, err = os.Stat(filepath.Join(dir, "Chart.yaml"))
 	require.NoError(t, err)
+}
+
+func TestHelmChartArchive_Write_FailsIfTgzExists(t *testing.T) {
+	tgzPath := filepath.Join(t.TempDir(), "my-chart.tgz")
+	require.NoError(t, os.WriteFile(tgzPath, []byte("existing"), 0o644))
+	d := &helmChartArchive{ref: tgzPath}
+
+	err := d.Write(context.Background(), minimalBundleWithVersion())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+}
+
+func TestHelmChartArchive_Write_FailsIfDirExists(t *testing.T) {
+	dir := t.TempDir()
+	d := &helmChartArchive{ref: dir}
+
+	err := d.Write(context.Background(), minimalBundleWithVersion())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
 }
 
 func TestHelmChartArchive_Write_TgzPath(t *testing.T) {
@@ -145,7 +186,7 @@ func TestHelmChartArchive_Write_TgzPath(t *testing.T) {
 }
 
 func TestHelmChartArchive_Write_DirPath(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "output")
 	b := minimalBundleWithVersion()
 	d := &helmChartArchive{ref: dir}
 
