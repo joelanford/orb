@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v8"
@@ -38,9 +39,11 @@ func newCatalogCmd() *cobra.Command {
 
 	cmd.AddCommand(newCatalogAddCmd())
 	cmd.AddCommand(newCatalogEditCmd())
+	cmd.AddCommand(newCatalogInfoCmd())
 	cmd.AddCommand(newCatalogListCmd())
 	cmd.AddCommand(newCatalogRemoveCmd())
 	cmd.AddCommand(newCatalogResolveCmd())
+	cmd.AddCommand(newCatalogSearchCmd())
 	cmd.AddCommand(newCatalogUpdateCmd())
 
 	return cmd
@@ -147,6 +150,193 @@ func runCatalogEdit(cmd *cobra.Command, name string, opts *catalogEditOptions) e
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Edited catalog %q\n", name)
 	return nil
+}
+
+func newCatalogInfoCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "info PACKAGE",
+		Short: "Show details for a package",
+		Long: `Display detailed information about a package from the highest-priority catalog that contains it.
+
+Examples:
+  orb catalog info vault
+  orb catalog info cert-manager`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCatalogInfo(cmd, args[0])
+		},
+	}
+}
+
+func runCatalogInfo(cmd *cobra.Command, packageName string) error {
+	dbPath, err := catalog.DefaultDBPath()
+	if err != nil {
+		return err
+	}
+
+	db, err := catalog.OpenDB(dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	catalogs, err := db.SortedCatalogs()
+	if err != nil {
+		return err
+	}
+
+	for _, cat := range catalogs {
+		pd, err := db.GetPackageData(cat.Name, packageName)
+		if err != nil {
+			return err
+		}
+		if pd == nil {
+			continue
+		}
+
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "Package:       %s\n", packageName)
+		if pd.DisplayName != "" {
+			fmt.Fprintf(out, "Display Name:  %s\n", pd.DisplayName)
+		}
+		fmt.Fprintf(out, "Catalog:       %s\n", cat.Name)
+		if pd.Description != "" {
+			fmt.Fprintf(out, "Description:   %s\n", pd.Description)
+		}
+		if len(pd.Keywords) > 0 {
+			fmt.Fprintf(out, "Keywords:      %s\n", strings.Join(pd.Keywords, ", "))
+		}
+		if len(pd.Channels) > 0 {
+			channelNames := make([]string, len(pd.Channels))
+			for i, ch := range pd.Channels {
+				channelNames[i] = ch.Name
+			}
+			fmt.Fprintf(out, "Channels:      %s\n", strings.Join(channelNames, ", "))
+		}
+		if len(pd.Bundles) > 0 {
+			latest := latestVersion(pd.Bundles)
+			if latest != "" {
+				fmt.Fprintf(out, "Versions:      %d (latest: %s)\n", len(pd.Bundles), latest)
+			} else {
+				fmt.Fprintf(out, "Versions:      %d\n", len(pd.Bundles))
+			}
+		}
+		return nil
+	}
+
+	return fmt.Errorf("package %q not found in any catalog", packageName)
+}
+
+func latestVersion(bundles []catalog.BundleData) string {
+	var latest string
+	var latestSemver *semver.Version
+	for _, b := range bundles {
+		if b.Version == "" {
+			continue
+		}
+		v, err := semver.NewVersion(b.Version)
+		if err != nil {
+			continue
+		}
+		if latestSemver == nil || v.GreaterThan(latestSemver) {
+			latestSemver = v
+			latest = b.Version
+		}
+	}
+	return latest
+}
+
+func newCatalogSearchCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "search KEYWORD",
+		Short: "Search packages by keyword",
+		Long: `Search for packages across all catalogs by keyword.
+
+The keyword is matched (case-insensitive) against the package name, display name,
+description, and keyword entries. Results are deduplicated by package name, keeping
+the match from the highest-priority catalog.
+
+Examples:
+  orb catalog search vault
+  orb catalog search security
+  orb catalog search certificate`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCatalogSearch(cmd, args[0])
+		},
+	}
+}
+
+func runCatalogSearch(cmd *cobra.Command, keyword string) error {
+	dbPath, err := catalog.DefaultDBPath()
+	if err != nil {
+		return err
+	}
+
+	db, err := catalog.OpenDB(dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	type searchResult struct {
+		catalogName string
+		packageName string
+		displayName string
+	}
+
+	seen := make(map[string]struct{})
+	var results []searchResult
+	lowerKeyword := strings.ToLower(keyword)
+
+	err = db.SearchPackageData(func(catalogName, packageName string, pd *catalog.PackageData) bool {
+		if _, ok := seen[packageName]; ok {
+			return true
+		}
+
+		if matchesKeyword(lowerKeyword, packageName, pd) {
+			seen[packageName] = struct{}{}
+			results = append(results, searchResult{
+				catalogName: catalogName,
+				packageName: packageName,
+				displayName: pd.DisplayName,
+			})
+		}
+		return true
+	})
+	if err != nil {
+		return err
+	}
+
+	if len(results) == 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "No packages found matching %q.\n", keyword)
+		return nil
+	}
+
+	w := newTabWriter(cmd.OutOrStdout())
+	fmt.Fprintln(w, "CATALOG\tPACKAGE\tDISPLAY NAME")
+	for _, r := range results {
+		fmt.Fprintf(w, "%s\t%s\t%s\n", r.catalogName, r.packageName, r.displayName)
+	}
+	return w.Flush()
+}
+
+func matchesKeyword(lowerKeyword string, packageName string, pd *catalog.PackageData) bool {
+	if strings.Contains(strings.ToLower(packageName), lowerKeyword) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(pd.DisplayName), lowerKeyword) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(pd.Description), lowerKeyword) {
+		return true
+	}
+	for _, kw := range pd.Keywords {
+		if strings.Contains(strings.ToLower(kw), lowerKeyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func newCatalogListCmd() *cobra.Command {

@@ -236,6 +236,36 @@ func (d *DB) GetPackageData(catalogName, packageName string) (*PackageData, erro
 	return &pd, nil
 }
 
+// SearchPackageData iterates all packages across all catalogs in priority order,
+// calling fn for each. If fn returns false, iteration stops early.
+func (d *DB) SearchPackageData(fn func(catalogName, packageName string, pd *PackageData) bool) error {
+	rows, err := d.db.Query(
+		`SELECT p.catalog_name, p.package_name, p.data
+		 FROM packages p
+		 JOIN catalogs c ON p.catalog_name = c.name
+		 ORDER BY c.priority DESC, c.name ASC, p.package_name ASC`,
+	)
+	if err != nil {
+		return fmt.Errorf("querying packages: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var catalogName, packageName, dataJSON string
+		if err := rows.Scan(&catalogName, &packageName, &dataJSON); err != nil {
+			return fmt.Errorf("scanning package row: %w", err)
+		}
+		var pd PackageData
+		if err := json.Unmarshal([]byte(dataJSON), &pd); err != nil {
+			return fmt.Errorf("unmarshaling package data for %q/%q: %w", catalogName, packageName, err)
+		}
+		if !fn(catalogName, packageName, &pd) {
+			break
+		}
+	}
+	return rows.Err()
+}
+
 func marshalLabels(labels map[string]string) string {
 	if labels == nil {
 		return "{}"
