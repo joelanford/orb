@@ -22,12 +22,15 @@ type plainDir struct {
 }
 
 func (d *plainDir) Write(_ context.Context, b *bundle.RegistryV1) error {
+	dir := expandPath(d.ref)
+	if _, err := os.Stat(dir); err == nil {
+		return fmt.Errorf("destination directory already exists: %s", dir)
+	}
+
 	objs, err := convert.Converter.Convert(*b, d.opts.Namespace, d.opts.ConvertOpts...)
 	if err != nil {
 		return err
 	}
-
-	dir := expandPath(d.ref)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
