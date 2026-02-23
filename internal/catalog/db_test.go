@@ -328,6 +328,87 @@ func TestDB_PackageData(t *testing.T) {
 	})
 }
 
+func TestDB_SearchPackageData(t *testing.T) {
+	t.Run("IteratesInPriorityOrder", func(t *testing.T) {
+		db := setupTestDB(t)
+		require.NoError(t, db.AddCatalog(Catalog{Name: "low", Ref: "r", Priority: 1}))
+		require.NoError(t, db.AddCatalog(Catalog{Name: "high", Ref: "r", Priority: 10}))
+		require.NoError(t, db.SetPackageData("low", map[string]*PackageData{
+			"pkg-low": {DisplayName: "Low Package", Bundles: []BundleData{{Name: "pkg-low.v1.0.0", Image: "img", Version: "1.0.0"}}},
+		}))
+		require.NoError(t, db.SetPackageData("high", map[string]*PackageData{
+			"pkg-high": {DisplayName: "High Package", Bundles: []BundleData{{Name: "pkg-high.v1.0.0", Image: "img", Version: "1.0.0"}}},
+		}))
+
+		var visited []string
+		err := db.SearchPackageData(func(catalogName, packageName string, pd *PackageData) bool {
+			visited = append(visited, catalogName+"/"+packageName)
+			return true
+		})
+		require.NoError(t, err)
+		require.Len(t, visited, 2)
+		assert.Equal(t, "high/pkg-high", visited[0])
+		assert.Equal(t, "low/pkg-low", visited[1])
+	})
+
+	t.Run("EarlyStop", func(t *testing.T) {
+		db := setupTestDB(t)
+		require.NoError(t, db.AddCatalog(Catalog{Name: "cat1", Ref: "r"}))
+		require.NoError(t, db.SetPackageData("cat1", map[string]*PackageData{
+			"aaa": {Bundles: []BundleData{{Name: "aaa.v1.0.0", Image: "img", Version: "1.0.0"}}},
+			"bbb": {Bundles: []BundleData{{Name: "bbb.v1.0.0", Image: "img", Version: "1.0.0"}}},
+			"ccc": {Bundles: []BundleData{{Name: "ccc.v1.0.0", Image: "img", Version: "1.0.0"}}},
+		}))
+
+		var visited []string
+		err := db.SearchPackageData(func(catalogName, packageName string, pd *PackageData) bool {
+			visited = append(visited, packageName)
+			return len(visited) < 2 // stop after second
+		})
+		require.NoError(t, err)
+		assert.Len(t, visited, 2)
+	})
+
+	t.Run("Empty", func(t *testing.T) {
+		db := setupTestDB(t)
+		var count int
+		err := db.SearchPackageData(func(catalogName, packageName string, pd *PackageData) bool {
+			count++
+			return true
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 0, count)
+	})
+
+	t.Run("UnmarshalsPackageData", func(t *testing.T) {
+		db := setupTestDB(t)
+		require.NoError(t, db.AddCatalog(Catalog{Name: "cat1", Ref: "r"}))
+		require.NoError(t, db.SetPackageData("cat1", map[string]*PackageData{
+			"vault": {
+				DisplayName: "Vault Operator",
+				Description: "Manages Vault clusters",
+				Keywords:    []string{"security", "vault"},
+				Channels:    []ChannelData{{Name: "stable", Entries: []EntryData{{Name: "vault.v1.0.0"}}}},
+				Bundles:     []BundleData{{Name: "vault.v1.0.0", Image: "img", Version: "1.0.0"}},
+			},
+		}))
+
+		var found *PackageData
+		err := db.SearchPackageData(func(catalogName, packageName string, pd *PackageData) bool {
+			if packageName == "vault" {
+				found = pd
+				return false
+			}
+			return true
+		})
+		require.NoError(t, err)
+		require.NotNil(t, found)
+		assert.Equal(t, "Vault Operator", found.DisplayName)
+		assert.Equal(t, "Manages Vault clusters", found.Description)
+		assert.Equal(t, []string{"security", "vault"}, found.Keywords)
+	})
+}
+
 // Verify BuildPackageData + DB integration for resolve.
 func TestResolve_AfterBuildPackageData(t *testing.T) {
 	dir := t.TempDir()
