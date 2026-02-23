@@ -2,20 +2,12 @@ package catalog
 
 import (
 	"cmp"
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	bsemver "github.com/blang/semver/v4"
-	"github.com/operator-framework/operator-registry/alpha/declcfg"
-	"github.com/operator-framework/operator-registry/alpha/property"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -40,7 +32,7 @@ type ResolveResult struct {
 
 // Resolve iterates catalogs in priority order, returning all matching bundles
 // from the first catalog that contains the package, sorted by version descending.
-func Resolve(cfg *Config, packageName string, opts ResolveOptions) ([]ResolveResult, error) {
+func Resolve(db *DB, packageName string, opts ResolveOptions) ([]ResolveResult, error) {
 	var selector labels.Selector
 	if opts.CatalogLabelSelector != "" {
 		var err error
@@ -68,9 +60,11 @@ func Resolve(cfg *Config, packageName string, opts ResolveOptions) ([]ResolveRes
 		installedVersion = &v
 	}
 
-	ctx := context.Background()
+	catalogs, err := db.SortedCatalogs()
+	if err != nil {
+		return nil, fmt.Errorf("listing catalogs: %w", err)
+	}
 
-	catalogs := cfg.SortedCatalogs()
 	for _, cat := range catalogs {
 		if selector != nil {
 			effectiveLabels := make(map[string]string, len(cat.Labels)+1)
@@ -83,19 +77,15 @@ func Resolve(cfg *Config, packageName string, opts ResolveOptions) ([]ResolveRes
 			}
 		}
 
-		packageDir := filepath.Join(cat.ContentDir, packageName)
-		if _, err := os.Stat(packageDir); errors.Is(err, fs.ErrNotExist) {
-			continue
-		} else if err != nil {
-			return nil, fmt.Errorf("checking package dir for %q in catalog %q: %w", packageName, cat.Name, err)
-		}
-
-		fbc, err := declcfg.LoadFS(ctx, os.DirFS(packageDir))
+		pkgData, err := db.GetPackageData(cat.Name, packageName)
 		if err != nil {
-			return nil, fmt.Errorf("loading FBC for package %q in catalog %q: %w", packageName, cat.Name, err)
+			return nil, fmt.Errorf("getting package data for %q from catalog %q: %w", packageName, cat.Name, err)
+		}
+		if pkgData == nil {
+			continue
 		}
 
-		results, err := resolveFromCatalog(cat, packageName, fbc, opts.Channels, versionConstraint, opts.InstalledName, installedVersion)
+		results, err := resolveFromPackageData(cat, packageName, pkgData, opts.Channels, versionConstraint, opts.InstalledName, installedVersion)
 		if err != nil {
 			return nil, fmt.Errorf("catalog %q: %w", cat.Name, err)
 		}
@@ -105,29 +95,29 @@ func Resolve(cfg *Config, packageName string, opts ResolveOptions) ([]ResolveRes
 	return nil, fmt.Errorf("package %q not found in any catalog", packageName)
 }
 
-func resolveFromCatalog(
+func resolveFromPackageData(
 	cat Catalog,
 	packageName string,
-	fbc *declcfg.DeclarativeConfig,
+	pkgData *PackageData,
 	channels []string,
 	versionConstraint *semver.Constraints,
 	installedName string,
 	installedVersion *bsemver.Version,
 ) ([]ResolveResult, error) {
 	// Build bundle lookup map
-	bundleMap := make(map[string]declcfg.Bundle)
-	for _, b := range fbc.Bundles {
+	bundleMap := make(map[string]BundleData)
+	for _, b := range pkgData.Bundles {
 		bundleMap[b.Name] = b
 	}
 
 	// Determine which channels to search
-	var channelsToSearch []declcfg.Channel
+	var channelsToSearch []ChannelData
 	if len(channels) > 0 {
 		requested := make(map[string]bool, len(channels))
 		for _, ch := range channels {
 			requested[ch] = true
 		}
-		for _, ch := range fbc.Channels {
+		for _, ch := range pkgData.Channels {
 			if requested[ch.Name] {
 				channelsToSearch = append(channelsToSearch, ch)
 			}
@@ -136,11 +126,10 @@ func resolveFromCatalog(
 			return nil, fmt.Errorf("no matching channels found for package %q", packageName)
 		}
 	} else {
-		channelsToSearch = fbc.Channels
+		channelsToSearch = pkgData.Channels
 	}
 
 	// Collect all matching bundles, tracking which channels each appears in.
-	// Key: bundle name, Value: result with parsed version for sorting.
 	type candidate struct {
 		result  ResolveResult
 		semver  *semver.Version
@@ -155,12 +144,11 @@ func resolveFromCatalog(
 				continue
 			}
 
-			ver, err := bundleVersion(b)
-			if err != nil {
+			if b.Version == "" {
 				continue
 			}
 
-			sv, err := semver.NewVersion(ver)
+			sv, err := semver.NewVersion(b.Version)
 			if err != nil {
 				continue
 			}
@@ -183,7 +171,7 @@ func resolveFromCatalog(
 						CatalogName: cat.Name,
 						PackageName: packageName,
 						BundleName:  entry.Name,
-						Version:     ver,
+						Version:     b.Version,
 						Image:       b.Image,
 					},
 					semver:  sv,
@@ -222,7 +210,7 @@ func resolveFromCatalog(
 	return results, nil
 }
 
-func isSuccessor(candidate declcfg.ChannelEntry, installedName string, installedVersion bsemver.Version) bool {
+func isSuccessor(candidate EntryData, installedName string, installedVersion bsemver.Version) bool {
 	// Direct replacement
 	if candidate.Replaces == installedName {
 		return true
@@ -242,20 +230,6 @@ func isSuccessor(candidate declcfg.ChannelEntry, installedName string, installed
 	}
 
 	return false
-}
-
-func bundleVersion(b declcfg.Bundle) (string, error) {
-	for _, p := range b.Properties {
-		if p.Type != property.TypePackage {
-			continue
-		}
-		var pkg property.Package
-		if err := json.Unmarshal(p.Value, &pkg); err != nil {
-			return "", fmt.Errorf("unmarshaling package property: %w", err)
-		}
-		return pkg.Version, nil
-	}
-	return "", fmt.Errorf("bundle %q has no olm.package property", b.Name)
 }
 
 // ChannelsString returns a comma-separated string of channel names.

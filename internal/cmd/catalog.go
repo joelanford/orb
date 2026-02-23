@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -110,45 +109,39 @@ Examples:
 }
 
 func runCatalogEdit(cmd *cobra.Command, name string, opts *catalogEditOptions) error {
-	ctx := cmd.Context()
-	_ = ctx
-
-	configPath, err := catalog.DefaultConfigPath()
+	dbPath, err := catalog.DefaultDBPath()
 	if err != nil {
 		return err
 	}
 
-	cfg, err := catalog.Load(configPath)
+	db, err := catalog.OpenDB(dbPath)
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
-	cat, ok := cfg.Get(name)
-	if !ok {
-		return fmt.Errorf("catalog %q not found", name)
-	}
-
-	if cmd.Flags().Changed("priority") {
-		cat.Priority = opts.priority
-	}
-
-	if cmd.Flags().Changed("label") {
-		if cat.Labels == nil {
-			cat.Labels = make(map[string]string)
+	err = db.UpdateCatalog(name, func(cat *catalog.Catalog) {
+		if cmd.Flags().Changed("priority") {
+			cat.Priority = opts.priority
 		}
-		for k, v := range opts.labels {
-			cat.Labels[k] = v
+
+		if cmd.Flags().Changed("label") {
+			if cat.Labels == nil {
+				cat.Labels = make(map[string]string)
+			}
+			for k, v := range opts.labels {
+				cat.Labels[k] = v
+			}
 		}
-	}
 
-	for _, k := range opts.removeLabels {
-		delete(cat.Labels, k)
-	}
-	if len(cat.Labels) == 0 {
-		cat.Labels = nil
-	}
-
-	if err := cfg.Save(configPath); err != nil {
+		for _, k := range opts.removeLabels {
+			delete(cat.Labels, k)
+		}
+		if len(cat.Labels) == 0 {
+			cat.Labels = nil
+		}
+	})
+	if err != nil {
 		return err
 	}
 
@@ -168,20 +161,22 @@ func newCatalogListCmd() *cobra.Command {
 }
 
 func runCatalogList(cmd *cobra.Command) error {
-	ctx := cmd.Context()
-	_ = ctx
-
-	configPath, err := catalog.DefaultConfigPath()
+	dbPath, err := catalog.DefaultDBPath()
 	if err != nil {
 		return err
 	}
 
-	cfg, err := catalog.Load(configPath)
+	db, err := catalog.OpenDB(dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	catalogs, err := db.SortedCatalogs()
 	if err != nil {
 		return err
 	}
 
-	catalogs := cfg.SortedCatalogs()
 	if len(catalogs) == 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "No catalogs configured.")
 		return nil
@@ -206,23 +201,33 @@ func newCatalogRemoveCmd() *cobra.Command {
 	}
 }
 
+type catalogUpdateOptions struct {
+	force bool
+}
+
 func newCatalogUpdateCmd() *cobra.Command {
-	return &cobra.Command{
+	opts := &catalogUpdateOptions{}
+
+	cmd := &cobra.Command{
 		Use:   "update [NAME]",
 		Short: "Update one or all catalogs",
 		Long: `Update catalogs by re-pulling FBC content from their OCI images.
 
 If NAME is given, only that catalog is updated. Otherwise all catalogs are updated.
-If the resolved digest has not changed, the pull is skipped.`,
+If the resolved digest has not changed, the pull is skipped unless --force is set.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var name string
 			if len(args) > 0 {
 				name = args[0]
 			}
-			return runCatalogUpdate(cmd, name)
+			return runCatalogUpdate(cmd, name, opts)
 		},
 	}
+
+	cmd.Flags().BoolVarP(&opts.force, "force", "f", false, "Force re-pull even if the digest has not changed")
+
+	return cmd
 }
 
 func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions) error {
@@ -236,23 +241,21 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return fmt.Errorf("only docker:// transport is supported for catalogs")
 	}
 
-	configPath, err := catalog.DefaultConfigPath()
+	dbPath, err := catalog.DefaultDBPath()
 	if err != nil {
 		return err
 	}
 
-	cfg, err := catalog.Load(configPath)
+	db, err := catalog.OpenDB(dbPath)
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
-	if _, ok := cfg.Get(name); ok {
+	if cat, err := db.GetCatalog(name); err != nil {
+		return err
+	} else if cat != nil {
 		return fmt.Errorf("catalog %q already exists", name)
-	}
-
-	cacheDir, err := catalog.DefaultCacheDir()
-	if err != nil {
-		return err
 	}
 
 	imgRef, err := dockerTransport.ParseReference("//" + tRef.Ref)
@@ -302,15 +305,15 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return fmt.Errorf("resolving image: %w", err)
 	}
 
-	contentDir := filepath.Join(cacheDir, name, desc.Digest.Algorithm().String(), desc.Digest.Encoded())
-	if err := os.MkdirAll(contentDir, 0755); err != nil {
+	tmpDir, err := os.MkdirTemp("", "orb-catalog-*")
+	if err != nil {
 		bar.Abort(true)
 		p.Wait()
-		return fmt.Errorf("creating content directory: %w", err)
+		return fmt.Errorf("creating temp directory: %w", err)
 	}
+	defer os.RemoveAll(tmpDir)
 
-	if err := resolver.Unpack(ctx, repo, contentDir); err != nil {
-		os.RemoveAll(contentDir)
+	if err := resolver.Unpack(ctx, repo, tmpDir); err != nil {
 		bar.Abort(true)
 		p.Wait()
 		return fmt.Errorf("unpacking catalog: %w", err)
@@ -319,19 +322,22 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 	bar.SetTotal(total, true)
 	p.Wait()
 
-	if err := cfg.Add(catalog.Catalog{
-		Name:       name,
-		Ref:        ref,
-		ContentDir: contentDir,
-		Priority:   opts.priority,
-		Labels:     opts.labels,
+	pkgData, err := catalog.BuildPackageData(ctx, os.DirFS(tmpDir))
+	if err != nil {
+		return fmt.Errorf("building package data: %w", err)
+	}
+
+	if err := db.AddCatalog(catalog.Catalog{
+		Name:     name,
+		Ref:      ref,
+		Digest:   desc.Digest.String(),
+		Priority: opts.priority,
+		Labels:   opts.labels,
 	}); err != nil {
-		os.RemoveAll(contentDir)
 		return err
 	}
 
-	if err := cfg.Save(configPath); err != nil {
-		os.RemoveAll(contentDir)
+	if err := db.SetPackageData(name, pkgData); err != nil {
 		return err
 	}
 
@@ -340,33 +346,18 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 }
 
 func runCatalogRemove(cmd *cobra.Command, name string) error {
-	ctx := cmd.Context()
-	_ = ctx
-
-	configPath, err := catalog.DefaultConfigPath()
+	dbPath, err := catalog.DefaultDBPath()
 	if err != nil {
 		return err
 	}
 
-	cfg, err := catalog.Load(configPath)
+	db, err := catalog.OpenDB(dbPath)
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
-	removed, err := cfg.Remove(name)
-	if err != nil {
-		return err
-	}
-
-	if removed.ContentDir != "" {
-		// Remove the name-level directory to clean up all digest subdirs
-		cacheDir, err := catalog.DefaultCacheDir()
-		if err == nil {
-			os.RemoveAll(filepath.Join(cacheDir, name))
-		}
-	}
-
-	if err := cfg.Save(configPath); err != nil {
+	if _, err := db.RemoveCatalog(name); err != nil {
 		return err
 	}
 
@@ -374,69 +365,67 @@ func runCatalogRemove(cmd *cobra.Command, name string) error {
 	return nil
 }
 
-func runCatalogUpdate(cmd *cobra.Command, name string) error {
+func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOptions) error {
 	ctx := cmd.Context()
 
-	configPath, err := catalog.DefaultConfigPath()
+	dbPath, err := catalog.DefaultDBPath()
 	if err != nil {
 		return err
 	}
 
-	cfg, err := catalog.Load(configPath)
+	db, err := catalog.OpenDB(dbPath)
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
-	cacheDir, err := catalog.DefaultCacheDir()
-	if err != nil {
-		return err
-	}
-
-	var toUpdate []string
+	var toUpdate []catalog.Catalog
 	if name != "" {
-		if _, ok := cfg.Get(name); !ok {
+		cat, err := db.GetCatalog(name)
+		if err != nil {
+			return err
+		}
+		if cat == nil {
 			return fmt.Errorf("catalog %q not found", name)
 		}
-		toUpdate = []string{name}
+		toUpdate = []catalog.Catalog{*cat}
 	} else {
-		for _, cat := range cfg.Catalogs {
-			toUpdate = append(toUpdate, cat.Name)
+		catalogs, err := db.SortedCatalogs()
+		if err != nil {
+			return err
 		}
+		toUpdate = catalogs
 	}
 
 	const numWorkers = 3
 
 	// ── Phase 1: Resolve refs and check freshness ──────────────────────
 	type resolvedCatalog struct {
-		name              string
-		digest            digest.Digest
-		newContentDir     string
-		currentContentDir string
-		upToDate          bool
-		cachingRepo       *image.CachingRepository
-		err               error
+		name        string
+		newDigest   digest.Digest
+		upToDate    bool
+		cachingRepo *image.CachingRepository
+		err         error
 	}
 
 	resolved := make([]resolvedCatalog, len(toUpdate))
 
 	resolveGroup, resolveCtx := errgroup.WithContext(ctx)
 	resolveGroup.SetLimit(numWorkers)
-	for idx, catName := range toUpdate {
-		cat, _ := cfg.Get(catName)
+	for idx, cat := range toUpdate {
 		resolveGroup.Go(func() error {
 			res := &resolved[idx]
-			res.name = catName
-			res.currentContentDir = cat.ContentDir
+			res.name = cat.Name
 
 			tRef, err := transport.ParseRef(cat.Ref)
 			if err != nil {
-				res.err = fmt.Errorf("catalog %q: %w", catName, err)
+				res.err = fmt.Errorf("catalog %q: %w", cat.Name, err)
 				return nil
 			}
 
 			imgRef, err := dockerTransport.ParseReference("//" + tRef.Ref)
 			if err != nil {
-				res.err = fmt.Errorf("catalog %q: parsing docker reference: %w", catName, err)
+				res.err = fmt.Errorf("catalog %q: parsing docker reference: %w", cat.Name, err)
 				return nil
 			}
 
@@ -444,33 +433,30 @@ func runCatalogUpdate(cmd *cobra.Command, name string) error {
 
 			client, err := image.NewContainersImageClient(resolveCtx, imgRef, sysCtx)
 			if err != nil {
-				res.err = fmt.Errorf("catalog %q: creating image client: %w", catName, err)
+				res.err = fmt.Errorf("catalog %q: creating image client: %w", cat.Name, err)
 				return nil
 			}
 
 			cachingRepo, err := image.NewCachingRepository(client)
 			if err != nil {
 				client.Close()
-				res.err = fmt.Errorf("catalog %q: creating caching repository: %w", catName, err)
+				res.err = fmt.Errorf("catalog %q: creating caching repository: %w", cat.Name, err)
 				return nil
 			}
 
 			desc, err := cachingRepo.Resolve(resolveCtx)
 			if err != nil {
 				cachingRepo.Close()
-				res.err = fmt.Errorf("catalog %q: resolving image: %w", catName, err)
+				res.err = fmt.Errorf("catalog %q: resolving image: %w", cat.Name, err)
 				return nil
 			}
 
-			res.digest = desc.Digest
-			res.newContentDir = filepath.Join(cacheDir, catName, desc.Digest.Algorithm().String(), desc.Digest.Encoded())
+			res.newDigest = desc.Digest
 
-			if res.newContentDir == cat.ContentDir {
-				if _, err := os.Stat(res.newContentDir); err == nil {
-					res.upToDate = true
-					cachingRepo.Close()
-					return nil
-				}
+			if !opts.force && desc.Digest.String() == cat.Digest {
+				res.upToDate = true
+				cachingRepo.Close()
+				return nil
 			}
 
 			// Keep cachingRepo open for phase 2.
@@ -531,31 +517,40 @@ func runCatalogUpdate(cmd *cobra.Command, name string) error {
 
 			res.cachingRepo.SetOnBytesRead(func(n int) { bar.IncrBy(n) })
 
-			if err := os.MkdirAll(res.newContentDir, 0755); err != nil {
-				res.err = fmt.Errorf("catalog %q: creating content directory: %w", res.name, err)
+			tmpDir, err := os.MkdirTemp("", "orb-catalog-*")
+			if err != nil {
+				res.err = fmt.Errorf("catalog %q: creating temp directory: %w", res.name, err)
 				bar.Abort(true)
 				return nil
 			}
+			defer os.RemoveAll(tmpDir)
 
-			if err := resolver.Unpack(unpackCtx, res.cachingRepo, res.newContentDir); err != nil {
-				os.RemoveAll(res.newContentDir)
+			if err := resolver.Unpack(unpackCtx, res.cachingRepo, tmpDir); err != nil {
 				res.err = fmt.Errorf("catalog %q: unpacking catalog: %w", res.name, err)
 				bar.Abort(true)
 				return nil
 			}
 
-			// Save config immediately so a subsequent run won't re-pull
-			// this catalog if a later catalog fails.
-			if err := cfg.UpdateAndSave(res.name, configPath, func(cat *catalog.Catalog) {
-				cat.ContentDir = res.newContentDir
-			}); err != nil {
-				os.RemoveAll(res.newContentDir)
-				res.err = fmt.Errorf("catalog %q: saving config: %w", res.name, err)
+			pkgData, err := catalog.BuildPackageData(unpackCtx, os.DirFS(tmpDir))
+			if err != nil {
+				res.err = fmt.Errorf("catalog %q: building package data: %w", res.name, err)
 				bar.Abort(true)
 				return nil
 			}
-			if res.currentContentDir != "" && res.currentContentDir != res.newContentDir {
-				os.RemoveAll(res.currentContentDir)
+
+			newDigest := res.newDigest.String()
+			if err := db.UpdateCatalog(res.name, func(cat *catalog.Catalog) {
+				cat.Digest = newDigest
+			}); err != nil {
+				res.err = fmt.Errorf("catalog %q: updating catalog: %w", res.name, err)
+				bar.Abort(true)
+				return nil
+			}
+
+			if err := db.SetPackageData(res.name, pkgData); err != nil {
+				res.err = fmt.Errorf("catalog %q: saving package data: %w", res.name, err)
+				bar.Abort(true)
+				return nil
 			}
 
 			bar.SetTotal(total, true)
@@ -584,9 +579,9 @@ func runCatalogUpdate(cmd *cobra.Command, name string) error {
 			continue
 		}
 		if res.upToDate {
-			fmt.Fprintf(out, "Catalog %q is up-to-date (%s)\n", res.name, res.digest)
+			fmt.Fprintf(out, "Catalog %q is up-to-date (%s)\n", res.name, res.newDigest)
 		} else {
-			fmt.Fprintf(out, "Catalog %q updated (%s)\n", res.name, res.digest)
+			fmt.Fprintf(out, "Catalog %q updated (%s)\n", res.name, res.newDigest)
 		}
 	}
 
@@ -644,18 +639,16 @@ Examples:
 }
 
 func runCatalogResolve(cmd *cobra.Command, packageName string, opts *catalogResolveOptions) error {
-	ctx := cmd.Context()
-	_ = ctx
-
-	configPath, err := catalog.DefaultConfigPath()
+	dbPath, err := catalog.DefaultDBPath()
 	if err != nil {
 		return err
 	}
 
-	cfg, err := catalog.Load(configPath)
+	db, err := catalog.OpenDB(dbPath)
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	resolveOpts := catalog.ResolveOptions{
 		CatalogLabelSelector: opts.catalogLabelSelector,
@@ -672,7 +665,7 @@ func runCatalogResolve(cmd *cobra.Command, packageName string, opts *catalogReso
 		resolveOpts.InstalledVersion = version
 	}
 
-	results, err := catalog.Resolve(cfg, packageName, resolveOpts)
+	results, err := catalog.Resolve(db, packageName, resolveOpts)
 	if err != nil {
 		return err
 	}
