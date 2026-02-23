@@ -44,14 +44,19 @@ orb catalog update operatorhubio
 orb catalog remove operatorhubio
 ```
 
-### Resolve
+### Catalog discovery
 
-Find matching bundles for a package from configured catalogs. Catalogs are
-searched in priority order; the first catalog containing the package is used.
-All matching bundles are returned, sorted by version descending.
+Search for packages, view package details, and resolve specific bundle versions.
 
 ```sh
-# Basic resolve (all versions)
+# Search for packages by keyword (matches name, description, and keywords)
+orb catalog search vault
+orb catalog search security
+
+# Show detailed info for a package
+orb catalog info vault
+
+# Resolve matching bundles (all versions, sorted by version descending)
 orb catalog resolve vault
 
 # Filter by channel
