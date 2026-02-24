@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"sync"
 
-	"github.com/Masterminds/semver/v3"
+	"github.com/joelanford/orb/internal/bundle"
 	"github.com/operator-framework/operator-registry/alpha/declcfg"
 	"github.com/operator-framework/operator-registry/alpha/property"
 )
@@ -46,11 +46,10 @@ type EntryData struct {
 // Version is extracted from the olm.package property at add/update time
 // so the resolver never needs to parse bundle properties.
 type BundleData struct {
-	Name          string   `json:"name"`
-	Image         string   `json:"image"`
-	Version       string   `json:"version"`
-	Release       string   `json:"release,omitempty"`
-	RelatedImages []string `json:"relatedImages,omitempty"`
+	Name                  string `json:"name"`
+	Image                 string `json:"image"`
+	bundle.VersionRelease `json:",inline"`
+	RelatedImages         []string `json:"relatedImages,omitempty"`
 }
 
 // BuildPackageData walks FBC content in the given filesystem, groups objects
@@ -128,11 +127,16 @@ func BuildPackageData(ctx context.Context, fsys fs.FS) (map[string]*PackageData,
 				}
 			}
 
+			vr, err := extractBundleVersionRelease(b)
+			if err != nil {
+				return err
+			}
+
 			bd := BundleData{
-				Name:          b.Name,
-				Image:         b.Image,
-				Version:       extractBundleVersion(b),
-				RelatedImages: relatedImages,
+				Name:           b.Name,
+				Image:          b.Image,
+				VersionRelease: *vr,
+				RelatedImages:  relatedImages,
 			}
 
 			// Extract CSV metadata for post-processing.
@@ -174,17 +178,10 @@ func BuildPackageData(ctx context.Context, fsys fs.FS) (map[string]*PackageData,
 
 		// Find highest-version bundle.
 		var highestBundle string
-		var highestVersion *semver.Version
+		var highestVersion *bundle.VersionRelease
 		for _, bd := range pd.Bundles {
-			if bd.Version == "" {
-				continue
-			}
-			v, err := semver.NewVersion(bd.Version)
-			if err != nil {
-				continue
-			}
-			if highestVersion == nil || v.GreaterThan(highestVersion) {
-				highestVersion = v
+			if highestVersion == nil || bd.Compare(*highestVersion) > 0 {
+				highestVersion = &bd.VersionRelease
 				highestBundle = bd.Name
 			}
 		}
@@ -222,7 +219,7 @@ func getOrCreate(m map[string]*PackageData, pkg string) *PackageData {
 	return pd
 }
 
-func extractBundleVersion(b declcfg.Bundle) string {
+func extractBundleVersionRelease(b declcfg.Bundle) (*bundle.VersionRelease, error) {
 	for _, p := range b.Properties {
 		if p.Type != property.TypePackage {
 			continue
@@ -231,7 +228,10 @@ func extractBundleVersion(b declcfg.Bundle) string {
 		if err := json.Unmarshal(p.Value, &pkg); err != nil {
 			continue
 		}
-		return pkg.Version
+		if pkg.Release == "" {
+			return bundle.NewLegacyRegistryV1VersionRelease(pkg.Version)
+		}
+		return bundle.NewVersionRelease(pkg.Version, pkg.Release)
 	}
-	return ""
+	return nil, fmt.Errorf("no valid package property found for %s", b.Name)
 }

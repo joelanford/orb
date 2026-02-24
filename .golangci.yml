@@ -17,6 +17,7 @@ linters:
         - os.RemoveAll
     errorlint:
       asserts: true
+      errorf: false
     gocritic:
       enabled-tags:
         - diagnostic

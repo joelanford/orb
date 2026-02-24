@@ -11,6 +11,8 @@ import (
 	"github.com/operator-framework/operator-registry/alpha/property"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/joelanford/orb/internal/bundle"
 )
 
 func writeFBCObjects(t *testing.T, path string, objects ...interface{}) {
@@ -29,6 +31,27 @@ func writeFBCObjects(t *testing.T, path string, objects ...interface{}) {
 
 func makeDeclcfgBundle(name, packageName, version, image string) declcfg.Bundle {
 	propVal, _ := json.Marshal(map[string]string{"packageName": packageName, "version": version})
+	return declcfg.Bundle{
+		Schema:  declcfg.SchemaBundle,
+		Name:    name,
+		Package: packageName,
+		Image:   image,
+		Properties: []property.Property{
+			{Type: property.TypePackage, Value: propVal},
+		},
+	}
+}
+
+func mustVersionRelease(v, r string) bundle.VersionRelease {
+	vr, err := bundle.NewVersionRelease(v, r)
+	if err != nil {
+		panic(err)
+	}
+	return *vr
+}
+
+func makeDeclcfgBundleWithRelease(name, packageName, version, release, image string) declcfg.Bundle {
+	propVal, _ := json.Marshal(map[string]string{"packageName": packageName, "version": version, "release": release})
 	return declcfg.Bundle{
 		Schema:  declcfg.SchemaBundle,
 		Name:    name,
@@ -91,7 +114,7 @@ func TestBuildPackageData_SubdirectoryLayout(t *testing.T) {
 	assert.Equal(t, "stable", pd1.Channels[0].Name)
 	require.Len(t, pd1.Bundles, 1)
 	assert.Equal(t, "pkg1.v1.0.0", pd1.Bundles[0].Name)
-	assert.Equal(t, "1.0.0", pd1.Bundles[0].Version)
+	assert.Equal(t, mustVersionRelease("1.0.0", ""), pd1.Bundles[0].VersionRelease)
 	assert.Equal(t, "reg.io/pkg1:v1.0.0", pd1.Bundles[0].Image)
 
 	// Verify pkg2
@@ -100,7 +123,7 @@ func TestBuildPackageData_SubdirectoryLayout(t *testing.T) {
 	require.Len(t, pd2.Channels, 1)
 	require.Len(t, pd2.Bundles, 1)
 	assert.Equal(t, "pkg2.v2.0.0", pd2.Bundles[0].Name)
-	assert.Equal(t, "2.0.0", pd2.Bundles[0].Version)
+	assert.Equal(t, mustVersionRelease("2.0.0", ""), pd2.Bundles[0].VersionRelease)
 }
 
 func TestBuildPackageData_SingleFlatFile(t *testing.T) {
@@ -132,8 +155,8 @@ func TestBuildPackageData_SingleFlatFile(t *testing.T) {
 
 	assert.NotNil(t, result["pkg1"])
 	assert.NotNil(t, result["pkg2"])
-	assert.Equal(t, "1.0.0", result["pkg1"].Bundles[0].Version)
-	assert.Equal(t, "0.1.0", result["pkg2"].Bundles[0].Version)
+	assert.Equal(t, mustVersionRelease("1.0.0", ""), result["pkg1"].Bundles[0].VersionRelease)
+	assert.Equal(t, mustVersionRelease("0.1.0", ""), result["pkg2"].Bundles[0].VersionRelease)
 }
 
 func TestBuildPackageData_MixedLayout(t *testing.T) {
@@ -359,4 +382,42 @@ func TestBuildPackageData_RelatedImagesDeduplicated(t *testing.T) {
 	require.NotNil(t, pd)
 	require.Len(t, pd.Bundles, 1)
 	assert.Equal(t, []string{"reg.io/operator:v1", "reg.io/sidecar:v1"}, pd.Bundles[0].RelatedImages)
+}
+
+func TestBuildPackageData_WithRelease(t *testing.T) {
+	dir := t.TempDir()
+
+	writeFBCObjects(t, filepath.Join(dir, "catalog.yaml"),
+		declcfg.Package{Schema: declcfg.SchemaPackage, Name: "pkg1", DefaultChannel: "stable"},
+		declcfg.Channel{
+			Schema:  declcfg.SchemaChannel,
+			Name:    "stable",
+			Package: "pkg1",
+			Entries: []declcfg.ChannelEntry{
+				{Name: "pkg1.v1.0.0-2"},
+				{Name: "pkg1.v1.0.0-3"},
+			},
+		},
+		makeDeclcfgBundleWithRelease("pkg1.v1.0.0-2", "pkg1", "1.0.0", "2", "reg.io/pkg1:v1.0.0-2"),
+		makeDeclcfgBundleWithRelease("pkg1.v1.0.0-3", "pkg1", "1.0.0", "3", "reg.io/pkg1:v1.0.0-3"),
+	)
+
+	result, err := BuildPackageData(context.Background(), os.DirFS(dir))
+	require.NoError(t, err)
+
+	pd := result["pkg1"]
+	require.NotNil(t, pd)
+	require.Len(t, pd.Bundles, 2)
+
+	// Both bundles should have the same version but different releases.
+	bundlesByName := make(map[string]BundleData)
+	for _, b := range pd.Bundles {
+		bundlesByName[b.Name] = b
+	}
+
+	b2 := bundlesByName["pkg1.v1.0.0-2"]
+	assert.Equal(t, mustVersionRelease("1.0.0", "2"), b2.VersionRelease)
+
+	b3 := bundlesByName["pkg1.v1.0.0-3"]
+	assert.Equal(t, mustVersionRelease("1.0.0", "3"), b3.VersionRelease)
 }
