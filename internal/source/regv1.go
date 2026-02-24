@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -20,6 +19,7 @@ import (
 
 	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/image"
+	"github.com/joelanford/orb/internal/transport"
 )
 
 type regv1Docker struct {
@@ -67,7 +67,7 @@ type regv1Dir struct {
 }
 
 func (s *regv1Dir) Read(_ context.Context) (*bundle.RegistryV1, error) {
-	rv1, err := bundle.FromFS(os.DirFS(expandPath(s.ref)))
+	rv1, err := bundle.FromFS(os.DirFS(transport.ExpandPath(s.ref)))
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (s *regv1Tar) Read(_ context.Context) (*bundle.RegistryV1, error) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	f, err := os.Open(expandPath(s.ref))
+	f, err := os.Open(transport.ExpandPath(s.ref))
 	if err != nil {
 		return nil, fmt.Errorf("opening tar file: %w", err)
 	}
@@ -196,16 +196,6 @@ func readFromImage(ctx context.Context, imgRef types.ImageReference, sysCtx *typ
 		return nil, fmt.Errorf("parsing bundle: %w", err)
 	}
 	return &rv1, nil
-}
-
-// expandPath expands a leading ~ to the user's home directory.
-func expandPath(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		if u, err := user.Current(); err == nil {
-			return filepath.Join(u.HomeDir, path[2:])
-		}
-	}
-	return path
 }
 
 // buildSystemContext maps source Options to a podman SystemContext.

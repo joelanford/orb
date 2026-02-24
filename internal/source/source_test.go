@@ -46,19 +46,19 @@ func TestNew(t *testing.T) {
 
 func TestExpandPath(t *testing.T) {
 	t.Run("AbsolutePath", func(t *testing.T) {
-		result := expandPath("/some/absolute/path")
+		result := transport.ExpandPath("/some/absolute/path")
 		assert.Equal(t, "/some/absolute/path", result)
 	})
 
 	t.Run("TildePath", func(t *testing.T) {
 		u, err := user.Current()
 		require.NoError(t, err)
-		result := expandPath("~/somedir")
+		result := transport.ExpandPath("~/somedir")
 		assert.Equal(t, filepath.Join(u.HomeDir, "somedir"), result)
 	})
 
 	t.Run("RelativePath", func(t *testing.T) {
-		result := expandPath("relative/path")
+		result := transport.ExpandPath("relative/path")
 		assert.Equal(t, "relative/path", result)
 	})
 }

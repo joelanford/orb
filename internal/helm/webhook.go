@@ -10,7 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/yaml"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 
@@ -19,49 +18,36 @@ import (
 
 func generateWebhooks(b *bundle.RegistryV1) ([]byte, error) {
 	var sb strings.Builder
-	first := true
 
 	for _, wh := range b.CSV.Spec.WebhookDefinitions {
 		if wh.Type == v1alpha1.ConversionWebhook {
 			continue // Conversion webhooks are handled in CRDs
 		}
 
-		if !first {
-			sb.WriteString("---\n")
-		}
-		first = false
+		sb.WriteString("---\n")
 
 		svcName := serviceNameForDeployment(wh.DeploymentName)
 		certName := certNameForDeployment(wh.DeploymentName)
 		webhookName := strings.TrimSuffix(wh.GenerateName, "-")
 
+		var kind string
 		switch wh.Type {
 		case v1alpha1.ValidatingAdmissionWebhook:
-			writeValidatingWebhook(&sb, webhookName, svcName, certName, wh)
+			kind = "ValidatingWebhookConfiguration"
 		case v1alpha1.MutatingAdmissionWebhook:
-			writeMutatingWebhook(&sb, webhookName, svcName, certName, wh)
+			kind = "MutatingWebhookConfiguration"
+		default:
+			continue
 		}
+		writeWebhookConfig(&sb, kind, webhookName, svcName, certName, wh)
 	}
 
 	return []byte(sb.String()), nil
 }
 
-func writeValidatingWebhook(sb *strings.Builder, webhookName, svcName, certName string, wh v1alpha1.WebhookDescription) {
+func writeWebhookConfig(sb *strings.Builder, kind, webhookName, svcName, certName string, wh v1alpha1.WebhookDescription) {
 	sb.WriteString("apiVersion: admissionregistration.k8s.io/v1\n")
-	sb.WriteString("kind: ValidatingWebhookConfiguration\n")
-	sb.WriteString("metadata:\n")
-	fmt.Fprintf(sb, "  name: %s\n", webhookName)
-	writeWebhookCertAnnotations(sb, certName)
-
-	sb.WriteString("webhooks:\n")
-	fmt.Fprintf(sb, "- name: %s\n", webhookName)
-
-	writeWebhookBody(sb, svcName, wh)
-}
-
-func writeMutatingWebhook(sb *strings.Builder, webhookName, svcName, certName string, wh v1alpha1.WebhookDescription) {
-	sb.WriteString("apiVersion: admissionregistration.k8s.io/v1\n")
-	sb.WriteString("kind: MutatingWebhookConfiguration\n")
+	fmt.Fprintf(sb, "kind: %s\n", kind)
 	sb.WriteString("metadata:\n")
 	fmt.Fprintf(sb, "  name: %s\n", webhookName)
 	writeWebhookCertAnnotations(sb, certName)
@@ -91,11 +77,7 @@ func writeWebhookBody(sb *strings.Builder, svcName string, wh v1alpha1.WebhookDe
 
 	// Rules
 	if len(wh.Rules) > 0 {
-		rulesData, _ := yaml.Marshal(wh.Rules)
-		sb.WriteString("  rules:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(rulesData), "\n"), "\n") {
-			sb.WriteString("  " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "rules", 2, wh.Rules)
 	}
 
 	// FailurePolicy
@@ -128,11 +110,7 @@ func writeWebhookBody(sb *strings.Builder, svcName string, wh v1alpha1.WebhookDe
 
 	// ObjectSelector
 	if wh.ObjectSelector != nil {
-		selData, _ := yaml.Marshal(wh.ObjectSelector)
-		sb.WriteString("  objectSelector:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(selData), "\n"), "\n") {
-			sb.WriteString("    " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "objectSelector", 2, wh.ObjectSelector)
 	}
 
 	// NamespaceSelector — conditional on watchNamespace
@@ -167,7 +145,6 @@ func generateWebhookServices(b *bundle.RegistryV1) ([]byte, error) {
 	}
 
 	var sb strings.Builder
-	first := true
 
 	for _, depSpec := range b.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs {
 		portSet, ok := webhookServicePortsByDeployment[depSpec.Name]
@@ -175,10 +152,7 @@ func generateWebhookServices(b *bundle.RegistryV1) ([]byte, error) {
 			continue
 		}
 
-		if !first {
-			sb.WriteString("---\n")
-		}
-		first = false
+		sb.WriteString("---\n")
 
 		svcName := serviceNameForDeployment(depSpec.Name)
 		certName := certNameForDeployment(depSpec.Name)

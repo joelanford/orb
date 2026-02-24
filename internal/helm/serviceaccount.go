@@ -22,15 +22,11 @@ func generateServiceAccounts(b *bundle.RegistryV1) ([]byte, error) {
 	}
 
 	var sb strings.Builder
-	first := true
 	for _, saName := range slices.Sorted(slices.Values(serviceAccountNames.UnsortedList())) {
 		if saName == "default" {
 			continue
 		}
-		if !first {
-			sb.WriteString("---\n")
-		}
-		first = false
+		sb.WriteString("---\n")
 		fmt.Fprintf(&sb, `apiVersion: v1
 kind: ServiceAccount
 metadata:

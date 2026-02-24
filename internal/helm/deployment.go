@@ -7,7 +7,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/yaml"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 
@@ -17,13 +16,9 @@ import (
 
 func generateDeployments(b *bundle.RegistryV1, webhookDeployments sets.Set[string]) ([]byte, error) {
 	var sb strings.Builder
-	first := true
 
 	for _, depSpec := range b.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs {
-		if !first {
-			sb.WriteString("---\n")
-		}
-		first = false
+		sb.WriteString("---\n")
 
 		isWebhookDep := webhookDeployments.Has(depSpec.Name)
 		if err := writeDeployment(&sb, b, depSpec, isWebhookDep); err != nil {
@@ -45,12 +40,7 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 	sb.WriteString("  namespace: {{ .Release.Namespace }}\n")
 
 	if len(depSpec.Label) > 0 {
-		sb.WriteString("  labels:\n")
-		labelsYAML, err := toYAMLIndent(map[string]string(depSpec.Label), 4)
-		if err != nil {
-			return fmt.Errorf("marshaling labels: %w", err)
-		}
-		sb.WriteString(labelsYAML + "\n")
+		writeYAMLField(sb, "labels", 2, map[string]string(depSpec.Label))
 	}
 
 	// --- spec ---
@@ -63,32 +53,11 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 	}
 
 	if depSpec.Spec.Selector != nil {
-		selectorYAML, err := toYAMLIndent(depSpec.Spec.Selector, 2)
-		if err != nil {
-			return fmt.Errorf("marshaling selector: %w", err)
-		}
-		sb.WriteString("  selector:\n")
-		// The toYAMLIndent already adds 2 spaces, but selector content needs to be under "selector:"
-		// Re-marshal with proper indent
-		selectorData, err := yaml.Marshal(depSpec.Spec.Selector)
-		if err != nil {
-			return fmt.Errorf("marshaling selector: %w", err)
-		}
-		for _, line := range strings.Split(strings.TrimRight(string(selectorData), "\n"), "\n") {
-			sb.WriteString("    " + escapeHelm(line) + "\n")
-		}
-		_ = selectorYAML
+		writeYAMLField(sb, "selector", 2, depSpec.Spec.Selector)
 	}
 
 	if depSpec.Spec.Strategy.Type != "" {
-		strategyData, err := yaml.Marshal(depSpec.Spec.Strategy)
-		if err != nil {
-			return fmt.Errorf("marshaling strategy: %w", err)
-		}
-		sb.WriteString("  strategy:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(strategyData), "\n"), "\n") {
-			sb.WriteString("    " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "strategy", 2, depSpec.Spec.Strategy)
 	}
 
 	// --- template ---
@@ -220,22 +189,14 @@ func writeAffinitySubField(sb *strings.Builder, field string, baseValue interfac
 	fmt.Fprintf(sb, "        %s: {{- toYaml %s | nindent 10 }}\n", field, configPath)
 	if hasBase {
 		sb.WriteString("        {{- else }}\n")
-		baseData, _ := yaml.Marshal(baseValue)
-		fmt.Fprintf(sb, "        %s:\n", field)
-		for _, line := range strings.Split(strings.TrimRight(string(baseData), "\n"), "\n") {
-			sb.WriteString("          " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, field, 8, baseValue)
 	}
 	sb.WriteString("        {{- end }}\n")
 }
 
 func writeTolerations(sb *strings.Builder, base []corev1.Toleration) {
 	if len(base) > 0 {
-		sb.WriteString("      tolerations:\n")
-		baseData, _ := yaml.Marshal(base)
-		for _, line := range strings.Split(strings.TrimRight(string(baseData), "\n"), "\n") {
-			sb.WriteString("      " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "tolerations", 6, base)
 		sb.WriteString("      {{- with .Values.deploymentConfig.tolerations }}\n")
 		sb.WriteString("      {{- toYaml . | nindent 6 }}\n")
 		sb.WriteString("      {{- end }}\n")
@@ -255,10 +216,7 @@ func writeVolumes(sb *strings.Builder, base []corev1.Volume, isWebhookDep bool, 
 	}
 
 	if hasBaseVolumes {
-		baseData, _ := yaml.Marshal(base)
-		for _, line := range strings.Split(strings.TrimRight(string(baseData), "\n"), "\n") {
-			sb.WriteString("      " + escapeHelm(line) + "\n")
-		}
+		writeYAMLFieldRaw(sb, 6, base)
 	}
 
 	// Cert volumes for webhook deployments
@@ -302,27 +260,15 @@ func writeContainerBase(sb *strings.Builder, c corev1.Container, isWebhookDep bo
 	}
 
 	if len(c.Command) > 0 {
-		cmdData, _ := yaml.Marshal(c.Command)
-		sb.WriteString("        command:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(cmdData), "\n"), "\n") {
-			sb.WriteString("        " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "command", 8, c.Command)
 	}
 
 	if len(c.Args) > 0 {
-		argsData, _ := yaml.Marshal(c.Args)
-		sb.WriteString("        args:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(argsData), "\n"), "\n") {
-			sb.WriteString("        " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "args", 8, c.Args)
 	}
 
 	if len(c.Ports) > 0 {
-		portsData, _ := yaml.Marshal(c.Ports)
-		sb.WriteString("        ports:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(portsData), "\n"), "\n") {
-			sb.WriteString("        " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "ports", 8, c.Ports)
 	}
 
 	// Env — mergeEnv semantics
@@ -339,29 +285,17 @@ func writeContainerBase(sb *strings.Builder, c corev1.Container, isWebhookDep bo
 
 	// LivenessProbe
 	if c.LivenessProbe != nil {
-		probeData, _ := yaml.Marshal(c.LivenessProbe)
-		sb.WriteString("        livenessProbe:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(probeData), "\n"), "\n") {
-			sb.WriteString("          " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "livenessProbe", 8, c.LivenessProbe)
 	}
 
 	// ReadinessProbe
 	if c.ReadinessProbe != nil {
-		probeData, _ := yaml.Marshal(c.ReadinessProbe)
-		sb.WriteString("        readinessProbe:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(probeData), "\n"), "\n") {
-			sb.WriteString("          " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "readinessProbe", 8, c.ReadinessProbe)
 	}
 
 	// SecurityContext
 	if c.SecurityContext != nil {
-		scData, _ := yaml.Marshal(c.SecurityContext)
-		sb.WriteString("        securityContext:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(scData), "\n"), "\n") {
-			sb.WriteString("          " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "securityContext", 8, c.SecurityContext)
 	}
 }
 
@@ -378,11 +312,7 @@ func writeContainerEnv(sb *strings.Builder, baseEnv []corev1.EnvVar) {
 
 func writeContainerEnvFrom(sb *strings.Builder, baseEnvFrom []corev1.EnvFromSource) {
 	if len(baseEnvFrom) > 0 {
-		envFromData, _ := yaml.Marshal(baseEnvFrom)
-		sb.WriteString("        envFrom:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(envFromData), "\n"), "\n") {
-			sb.WriteString("        " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "envFrom", 8, baseEnvFrom)
 		sb.WriteString("        {{- with .Values.deploymentConfig.envFrom }}\n")
 		sb.WriteString("        {{- toYaml . | nindent 8 }}\n")
 		sb.WriteString("        {{- end }}\n")
@@ -399,11 +329,7 @@ func writeContainerResources(sb *strings.Builder, c *corev1.Container) {
 	sb.WriteString("        resources: {{- toYaml .Values.deploymentConfig.resources | nindent 10 }}\n")
 	sb.WriteString("        {{- else }}\n")
 	if c.Resources.Limits != nil || c.Resources.Requests != nil {
-		resData, _ := yaml.Marshal(c.Resources)
-		sb.WriteString("        resources:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(resData), "\n"), "\n") {
-			sb.WriteString("          " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "resources", 8, c.Resources)
 	}
 	sb.WriteString("        {{- end }}\n")
 }
@@ -412,11 +338,7 @@ func writeContainerVolumeMounts(sb *strings.Builder, baseMounts []corev1.VolumeM
 	hasBase := len(baseMounts) > 0
 
 	if hasBase {
-		mountsData, _ := yaml.Marshal(baseMounts)
-		sb.WriteString("        volumeMounts:\n")
-		for _, line := range strings.Split(strings.TrimRight(string(mountsData), "\n"), "\n") {
-			sb.WriteString("        " + escapeHelm(line) + "\n")
-		}
+		writeYAMLField(sb, "volumeMounts", 8, baseMounts)
 	}
 
 	// Cert volume mounts for webhook deployments

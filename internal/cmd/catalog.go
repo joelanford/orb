@@ -2,15 +2,16 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v8"
@@ -112,12 +113,7 @@ Examples:
 }
 
 func runCatalogEdit(cmd *cobra.Command, name string, opts *catalogEditOptions) error {
-	dbPath, err := catalog.DefaultDBPath()
-	if err != nil {
-		return err
-	}
-
-	db, err := catalog.OpenDB(dbPath)
+	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
 	}
@@ -169,12 +165,7 @@ Examples:
 }
 
 func runCatalogInfo(cmd *cobra.Command, packageName string) error {
-	dbPath, err := catalog.DefaultDBPath()
-	if err != nil {
-		return err
-	}
-
-	db, err := catalog.OpenDB(dbPath)
+	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
 	}
@@ -214,23 +205,13 @@ func runCatalogInfo(cmd *cobra.Command, packageName string) error {
 			fmt.Fprintf(out, "Channels:      %s\n", strings.Join(channelNames, ", "))
 		}
 		if len(pd.Bundles) > 0 {
-			latest := latestVersion(pd.Bundles)
-			fmt.Fprintf(out, "Versions:      %d (latest: %s)\n", len(pd.Bundles), latest)
+			latest := slices.MaxFunc(pd.Bundles, catalog.CompareBundleData)
+			fmt.Fprintf(out, "Versions:      %d (latest: %s)\n", len(pd.Bundles), latest.VersionRelease)
 		}
 		return nil
 	}
 
 	return fmt.Errorf("package %q not found in any catalog", packageName)
-}
-
-func latestVersion(bundles []catalog.BundleData) *bundle.VersionRelease {
-	var latestVersionRelease *bundle.VersionRelease
-	for _, b := range bundles {
-		if latestVersionRelease == nil || b.Compare(*latestVersionRelease) > 0 {
-			latestVersionRelease = &b.VersionRelease
-		}
-	}
-	return latestVersionRelease
 }
 
 func newCatalogSearchCmd() *cobra.Command {
@@ -255,12 +236,7 @@ Examples:
 }
 
 func runCatalogSearch(cmd *cobra.Command, keyword string) error {
-	dbPath, err := catalog.DefaultDBPath()
-	if err != nil {
-		return err
-	}
-
-	db, err := catalog.OpenDB(dbPath)
+	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
 	}
@@ -338,12 +314,7 @@ func newCatalogListCmd() *cobra.Command {
 }
 
 func runCatalogList(cmd *cobra.Command) error {
-	dbPath, err := catalog.DefaultDBPath()
-	if err != nil {
-		return err
-	}
-
-	db, err := catalog.OpenDB(dbPath)
+	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
 	}
@@ -418,12 +389,7 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return fmt.Errorf("only docker:// transport is supported for catalogs")
 	}
 
-	dbPath, err := catalog.DefaultDBPath()
-	if err != nil {
-		return err
-	}
-
-	db, err := catalog.OpenDB(dbPath)
+	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
 	}
@@ -435,22 +401,9 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return fmt.Errorf("catalog %q already exists", name)
 	}
 
-	imgRef, err := dockerTransport.ParseReference("//" + tRef.Ref)
+	repo, err := newDockerCachingRepo(ctx, tRef.Ref)
 	if err != nil {
-		return fmt.Errorf("parsing docker reference: %w", err)
-	}
-
-	sysCtx := &types.SystemContext{}
-
-	client, err := image.NewContainersImageClient(ctx, imgRef, sysCtx)
-	if err != nil {
-		return fmt.Errorf("creating image client: %w", err)
-	}
-
-	repo, err := image.NewCachingRepository(client)
-	if err != nil {
-		client.Close()
-		return fmt.Errorf("creating caching repository: %w", err)
+		return err
 	}
 	defer repo.Close()
 
@@ -523,12 +476,7 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 }
 
 func runCatalogRemove(cmd *cobra.Command, name string) error {
-	dbPath, err := catalog.DefaultDBPath()
-	if err != nil {
-		return err
-	}
-
-	db, err := catalog.OpenDB(dbPath)
+	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
 	}
@@ -545,12 +493,7 @@ func runCatalogRemove(cmd *cobra.Command, name string) error {
 func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOptions) error {
 	ctx := cmd.Context()
 
-	dbPath, err := catalog.DefaultDBPath()
-	if err != nil {
-		return err
-	}
-
-	db, err := catalog.OpenDB(dbPath)
+	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
 	}
@@ -600,24 +543,9 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 				return nil
 			}
 
-			imgRef, err := dockerTransport.ParseReference("//" + tRef.Ref)
+			cachingRepo, err := newDockerCachingRepo(resolveCtx, tRef.Ref)
 			if err != nil {
-				res.err = fmt.Errorf("catalog %q: parsing docker reference: %w", cat.Name, err)
-				return nil
-			}
-
-			sysCtx := &types.SystemContext{}
-
-			client, err := image.NewContainersImageClient(resolveCtx, imgRef, sysCtx)
-			if err != nil {
-				res.err = fmt.Errorf("catalog %q: creating image client: %w", cat.Name, err)
-				return nil
-			}
-
-			cachingRepo, err := image.NewCachingRepository(client)
-			if err != nil {
-				client.Close()
-				res.err = fmt.Errorf("catalog %q: creating caching repository: %w", cat.Name, err)
+				res.err = fmt.Errorf("catalog %q: %w", cat.Name, err)
 				return nil
 			}
 
@@ -816,12 +744,7 @@ Examples:
 }
 
 func runCatalogResolve(cmd *cobra.Command, packageName string, opts *catalogResolveOptions) error {
-	dbPath, err := catalog.DefaultDBPath()
-	if err != nil {
-		return err
-	}
-
-	db, err := catalog.OpenDB(dbPath)
+	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
 	}
@@ -904,4 +827,25 @@ func printResolveResults(out io.Writer, results []catalog.ResolveResult, format 
 	default:
 		return fmt.Errorf("unsupported output format %q: use json, yaml, or jsonpath=TEMPLATE", format)
 	}
+}
+
+func newDockerCachingRepo(ctx context.Context, ref string) (*image.CachingRepository, error) {
+	imgRef, err := dockerTransport.ParseReference("//" + ref)
+	if err != nil {
+		return nil, fmt.Errorf("parsing docker reference: %w", err)
+	}
+
+	sysCtx := &types.SystemContext{}
+
+	client, err := image.NewContainersImageClient(ctx, imgRef, sysCtx)
+	if err != nil {
+		return nil, fmt.Errorf("creating image client: %w", err)
+	}
+
+	repo, err := image.NewCachingRepository(client)
+	if err != nil {
+		client.Close()
+		return nil, fmt.Errorf("creating caching repository: %w", err)
+	}
+	return repo, nil
 }

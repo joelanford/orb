@@ -16,7 +16,6 @@ func generateAdditional(b *bundle.RegistryV1) ([]byte, error) {
 	}
 
 	var sb strings.Builder
-	first := true
 
 	for _, res := range b.Others {
 		supported, namespaced := registrybundle.IsSupported(res.GetKind())
@@ -24,10 +23,7 @@ func generateAdditional(b *bundle.RegistryV1) ([]byte, error) {
 			return nil, fmt.Errorf("bundle contains unsupported resource: Name: %v, Kind: %v", res.GetName(), res.GetKind())
 		}
 
-		if !first {
-			sb.WriteString("---\n")
-		}
-		first = false
+		sb.WriteString("---\n")
 
 		obj := res.DeepCopy()
 		if namespaced {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"slices"
 	"sync"
 
 	"github.com/joelanford/orb/internal/bundle"
@@ -50,6 +51,12 @@ type BundleData struct {
 	Image                 string `json:"image"`
 	bundle.VersionRelease `json:",inline"`
 	RelatedImages         []string `json:"relatedImages,omitempty"`
+}
+
+// CompareBundleData compares two BundleData values by version.
+// Suitable for use with slices.SortFunc and slices.MaxFunc.
+func CompareBundleData(a, b BundleData) int {
+	return a.Compare(b.VersionRelease)
 }
 
 // BuildPackageData walks FBC content in the given filesystem, groups objects
@@ -176,20 +183,11 @@ func BuildPackageData(ctx context.Context, fsys fs.FS) (map[string]*PackageData,
 			pd.Description = pm.Description
 		}
 
-		// Find highest-version bundle.
-		var highestBundle string
-		var highestVersion *bundle.VersionRelease
-		for _, bd := range pd.Bundles {
-			if highestVersion == nil || bd.Compare(*highestVersion) > 0 {
-				highestVersion = &bd.VersionRelease
-				highestBundle = bd.Name
-			}
-		}
-
 		// Populate from CSV metadata of highest-version bundle.
-		if highestBundle != "" {
+		if len(pd.Bundles) > 0 {
+			highest := slices.MaxFunc(pd.Bundles, CompareBundleData)
 			if bundleMetas, ok := csvMetas[pkgName]; ok {
-				if csv, ok := bundleMetas[highestBundle]; ok {
+				if csv, ok := bundleMetas[highest.Name]; ok {
 					pd.DisplayName = csv.DisplayName
 					pd.Keywords = csv.Keywords
 					if pd.Description == "" {
