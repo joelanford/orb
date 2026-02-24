@@ -13,17 +13,13 @@ import (
 
 func generateRBAC(b *bundle.RegistryV1) ([]byte, error) {
 	var sb strings.Builder
-	first := true
 
 	// 1. ClusterPermissions — always ClusterRole/ClusterRoleBinding (unconditional)
 	for _, perm := range b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions {
 		saName := saNameOrDefault(perm.ServiceAccountName)
 		name := convert.DefaultUniqueNameGenerator(fmt.Sprintf("%s-%s", b.CSV.Name, saName), perm)
 
-		if !first {
-			sb.WriteString("---\n")
-		}
-		first = false
+		sb.WriteString("---\n")
 
 		rulesYAML, err := renderRules(perm.Rules, 0)
 		if err != nil {
@@ -56,14 +52,11 @@ subjects:
 
 	// 2. Permissions — conditional on watchNamespace
 	if len(b.CSV.Spec.InstallStrategy.StrategySpec.Permissions) > 0 {
-		if !first {
-			sb.WriteString("---\n")
-		}
+		sb.WriteString("---\n")
 
 		// AllNamespaces mode: promote to ClusterRole + add namespace get/list/watch
 		sb.WriteString("{{- if eq .Values.watchNamespace \"\" }}\n")
-		firstInBlock := true
-		for _, perm := range b.CSV.Spec.InstallStrategy.StrategySpec.Permissions {
+		for i, perm := range b.CSV.Spec.InstallStrategy.StrategySpec.Permissions {
 			saName := saNameOrDefault(perm.ServiceAccountName)
 
 			// Add namespaces get/list/watch rule for AllNamespaces
@@ -76,10 +69,9 @@ subjects:
 
 			name := convert.DefaultUniqueNameGenerator(fmt.Sprintf("%s-%s", b.CSV.Name, saName), *allNSPerm)
 
-			if !firstInBlock {
+			if i > 0 {
 				sb.WriteString("---\n")
 			}
-			firstInBlock = false
 
 			rulesYAML, err := renderRules(allNSPerm.Rules, 0)
 			if err != nil {
@@ -112,15 +104,13 @@ subjects:
 
 		// Non-AllNamespaces mode: Role + RoleBinding in watchNamespace
 		sb.WriteString("{{- else }}\n")
-		firstInBlock = true
-		for _, perm := range b.CSV.Spec.InstallStrategy.StrategySpec.Permissions {
+		for i, perm := range b.CSV.Spec.InstallStrategy.StrategySpec.Permissions {
 			saName := saNameOrDefault(perm.ServiceAccountName)
 			name := convert.DefaultUniqueNameGenerator(fmt.Sprintf("%s-%s", b.CSV.Name, saName), perm)
 
-			if !firstInBlock {
+			if i > 0 {
 				sb.WriteString("---\n")
 			}
-			firstInBlock = false
 
 			rulesYAML, err := renderRules(perm.Rules, 0)
 			if err != nil {

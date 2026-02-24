@@ -732,30 +732,37 @@ func TestEscapeHelm(t *testing.T) {
 	}
 }
 
-func TestToYAMLIndent(t *testing.T) {
-	t.Run("Indent0", func(t *testing.T) {
-		result, err := toYAMLIndent(map[string]string{"key": "value"}, 0)
-		require.NoError(t, err)
-		assert.Contains(t, result, "key: value")
-		assert.False(t, strings.HasPrefix(result, " "))
+func TestWriteYAMLField(t *testing.T) {
+	t.Run("Scalar", func(t *testing.T) {
+		var sb strings.Builder
+		writeYAMLField(&sb, "enabled", 0, true)
+		assert.Equal(t, "enabled:\n  true\n", sb.String())
 	})
 
-	t.Run("Indent4", func(t *testing.T) {
-		result, err := toYAMLIndent(map[string]string{"key": "value"}, 4)
-		require.NoError(t, err)
-		assert.True(t, strings.HasPrefix(result, "    "))
+	t.Run("ScalarIndented", func(t *testing.T) {
+		var sb strings.Builder
+		writeYAMLField(&sb, "count", 4, 42)
+		assert.Equal(t, "    count:\n      42\n", sb.String())
 	})
 
-	t.Run("Multiline", func(t *testing.T) {
+	t.Run("SingleKeyMap", func(t *testing.T) {
+		var sb strings.Builder
+		writeYAMLField(&sb, "myField", 0, map[string]string{"key": "value"})
+		assert.Equal(t, "myField:\n  key: value\n", sb.String())
+	})
+
+	t.Run("MultilineMap", func(t *testing.T) {
+		var sb strings.Builder
 		obj := map[string]interface{}{
 			"a": "1",
 			"b": "2",
 		}
-		result, err := toYAMLIndent(obj, 2)
-		require.NoError(t, err)
-		for _, line := range strings.Split(result, "\n") {
-			if line != "" {
-				assert.True(t, strings.HasPrefix(line, "  "), "line %q should be indented", line)
+		writeYAMLField(&sb, "data", 2, obj)
+		result := sb.String()
+		assert.True(t, strings.HasPrefix(result, "  data:\n"))
+		for _, line := range strings.Split(strings.TrimRight(result, "\n"), "\n") {
+			if line != "" && !strings.HasSuffix(line, ":") {
+				assert.True(t, strings.HasPrefix(line, "    "), "line %q should be indented by 4", line)
 			}
 		}
 	})

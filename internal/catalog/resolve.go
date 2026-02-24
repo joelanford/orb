@@ -7,7 +7,6 @@ import (
 
 	mmsemver "github.com/Masterminds/semver/v3"
 	bsemver "github.com/blang/semver/v4"
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -23,12 +22,10 @@ type ResolveOptions struct {
 
 // ResolveResult holds a resolved bundle and all channels it appears in.
 type ResolveResult struct {
-	CatalogName           string   `json:"catalog"`
-	PackageName           string   `json:"package"`
-	Channels              []string `json:"channels"`
-	BundleName            string   `json:"bundle"`
-	bundle.VersionRelease `json:",inline"`
-	Image                 string `json:"image"`
+	CatalogName string   `json:"catalog"`
+	PackageName string   `json:"package"`
+	Channels    []string `json:"channels"`
+	BundleData  `json:",inline"`
 }
 
 // Resolve iterates catalogs in priority order, returning all matching bundles
@@ -159,11 +156,9 @@ func resolveFromPackageData(
 			} else {
 				candidates[entry.Name] = &candidate{
 					result: ResolveResult{
-						CatalogName:    cat.Name,
-						PackageName:    packageName,
-						BundleName:     entry.Name,
-						VersionRelease: b.VersionRelease,
-						Image:          b.Image,
+						CatalogName: cat.Name,
+						PackageName: packageName,
+						BundleData:  b,
 					},
 					chanSet: map[string]struct{}{ch.Name: {}},
 				}
@@ -182,7 +177,7 @@ func resolveFromPackageData(
 		sorted = append(sorted, c)
 	}
 	slices.SortFunc(sorted, func(a, b *candidate) int {
-		return b.result.Compare(a.result.VersionRelease)
+		return CompareBundleData(b.result.BundleData, a.result.BundleData)
 	})
 	for _, c := range sorted {
 		chans := make([]string, 0, len(c.chanSet))

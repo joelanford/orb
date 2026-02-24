@@ -441,12 +441,12 @@ func TestResolve_AfterBuildPackageData(t *testing.T) {
 	results, err := Resolve(db, "vault", ResolveOptions{})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "vault.v1.0.0", results[0].BundleName)
+	assert.Equal(t, "vault.v1.0.0", results[0].Name)
 
 	results, err = Resolve(db, "redis", ResolveOptions{})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "redis.v2.0.0", results[0].BundleName)
+	assert.Equal(t, "redis.v2.0.0", results[0].Name)
 }
 
 func TestDB_PackageData_RoundTripWithRelease(t *testing.T) {

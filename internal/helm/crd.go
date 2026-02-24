@@ -28,13 +28,9 @@ func generateCRDs(b *bundle.RegistryV1) ([]byte, error) {
 	}
 
 	var sb strings.Builder
-	first := true
 
 	for _, crd := range b.CRDs {
-		if !first {
-			sb.WriteString("---\n")
-		}
-		first = false
+		sb.WriteString("---\n")
 
 		cp := crd.DeepCopy()
 

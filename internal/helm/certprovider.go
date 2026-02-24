@@ -23,16 +23,12 @@ func generateCertProvider(b *bundle.RegistryV1) ([]byte, error) {
 	var sb strings.Builder
 	sb.WriteString("{{- if eq .Values.certProvider \"cert-manager\" }}\n")
 
-	first := true
 	for _, depName := range webhookDeployments.UnsortedList() {
 		svcName := serviceNameForDeployment(depName)
 		certName := certNameForDeployment(depName)
 		issuerName := convert.ObjectNameForBaseAndSuffix(certName, "selfsigned-issuer")
 
-		if !first {
-			sb.WriteString("---\n")
-		}
-		first = false
+		sb.WriteString("---\n")
 
 		// Issuer
 		fmt.Fprintf(&sb, `apiVersion: cert-manager.io/v1

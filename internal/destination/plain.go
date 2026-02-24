@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/user"
 	"path/filepath"
-	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
 	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/convert"
+	"github.com/joelanford/orb/internal/transport"
 )
 
 type plainDir struct {
@@ -22,7 +21,7 @@ type plainDir struct {
 }
 
 func (d *plainDir) Write(_ context.Context, b *bundle.RegistryV1) error {
-	dir := expandPath(d.ref)
+	dir := transport.ExpandPath(d.ref)
 	if _, err := os.Stat(dir); err == nil {
 		return fmt.Errorf("destination directory already exists: %s", dir)
 	}
@@ -55,16 +54,6 @@ func (d *plainStdout) Write(_ context.Context, b *bundle.RegistryV1) error {
 		return err
 	}
 	return outputYAML(os.Stdout, objs)
-}
-
-// expandPath expands a leading ~ to the user's home directory.
-func expandPath(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		if u, err := user.Current(); err == nil {
-			return filepath.Join(u.HomeDir, path[2:])
-		}
-	}
-	return path
 }
 
 func outputYAML(w io.Writer, objs []client.Object) error {

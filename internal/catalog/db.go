@@ -33,6 +33,16 @@ type DB struct {
 	db *sql.DB
 }
 
+// OpenDefaultDB opens (or creates) the default SQLite database.
+// It combines DefaultDBPath and OpenDB into a single call.
+func OpenDefaultDB() (*DB, error) {
+	path, err := DefaultDBPath()
+	if err != nil {
+		return nil, err
+	}
+	return OpenDB(path)
+}
+
 // OpenDB opens (or creates) a SQLite database at the given path.
 // It creates tables if they do not exist and enables foreign keys.
 func OpenDB(path string) (*DB, error) {

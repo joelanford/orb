@@ -56,7 +56,7 @@ func TestResolve_BasicMatch(t *testing.T) {
 
 	assert.Equal(t, "test-cat", results[0].CatalogName)
 	assert.Equal(t, "my-pkg", results[0].PackageName)
-	assert.Equal(t, "my-pkg.v1.0.0", results[0].BundleName)
+	assert.Equal(t, "my-pkg.v1.0.0", results[0].Name)
 	assert.Equal(t, mustVersionRelease("1.0.0", ""), results[0].VersionRelease)
 	assert.Equal(t, "reg.io/my-pkg:v1.0.0", results[0].Image)
 	assert.Equal(t, []string{"stable"}, results[0].Channels)
@@ -201,7 +201,7 @@ func TestResolve_InstalledVersion_Replaces(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "my-pkg.v2.0.0", results[0].BundleName)
+	assert.Equal(t, "my-pkg.v2.0.0", results[0].Name)
 }
 
 func TestResolve_InstalledVersion_Skips(t *testing.T) {
@@ -226,7 +226,7 @@ func TestResolve_InstalledVersion_Skips(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "my-pkg.v3.0.0", results[0].BundleName)
+	assert.Equal(t, "my-pkg.v3.0.0", results[0].Name)
 }
 
 func TestResolve_InstalledVersion_SkipRange(t *testing.T) {
@@ -251,7 +251,7 @@ func TestResolve_InstalledVersion_SkipRange(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "my-pkg.v2.0.0", results[0].BundleName)
+	assert.Equal(t, "my-pkg.v2.0.0", results[0].Name)
 }
 
 func TestResolve_InstalledVersion_NoSuccessor(t *testing.T) {
@@ -453,12 +453,12 @@ func TestResolve_FlatFBCLayout(t *testing.T) {
 	resultsA, err := Resolve(db, "pkg-a", ResolveOptions{})
 	require.NoError(t, err)
 	require.Len(t, resultsA, 1)
-	assert.Equal(t, "pkg-a.v1.0.0", resultsA[0].BundleName)
+	assert.Equal(t, "pkg-a.v1.0.0", resultsA[0].Name)
 
 	resultsB, err := Resolve(db, "pkg-b", ResolveOptions{})
 	require.NoError(t, err)
 	require.Len(t, resultsB, 1)
-	assert.Equal(t, "pkg-b.v2.0.0", resultsB[0].BundleName)
+	assert.Equal(t, "pkg-b.v2.0.0", resultsB[0].Name)
 }
 
 func TestResolve_SortOrder_SameVersionDifferentRelease(t *testing.T) {
@@ -485,9 +485,9 @@ func TestResolve_SortOrder_SameVersionDifferentRelease(t *testing.T) {
 	require.Len(t, results, 3)
 
 	// Should be sorted by release descending: 3, 2, 1
-	assert.Equal(t, "my-pkg.v1.0.0-3", results[0].BundleName)
-	assert.Equal(t, "my-pkg.v1.0.0-2", results[1].BundleName)
-	assert.Equal(t, "my-pkg.v1.0.0-1", results[2].BundleName)
+	assert.Equal(t, "my-pkg.v1.0.0-3", results[0].Name)
+	assert.Equal(t, "my-pkg.v1.0.0-2", results[1].Name)
+	assert.Equal(t, "my-pkg.v1.0.0-1", results[2].Name)
 }
 
 func TestResolve_VersionConstraint_MatchesBothReleases(t *testing.T) {
@@ -513,6 +513,6 @@ func TestResolve_VersionConstraint_MatchesBothReleases(t *testing.T) {
 	results, err := Resolve(db, "my-pkg", ResolveOptions{Version: ">=1.0.0 <2.0.0"})
 	require.NoError(t, err)
 	require.Len(t, results, 2)
-	assert.Equal(t, "my-pkg.v1.0.0-2", results[0].BundleName)
-	assert.Equal(t, "my-pkg.v1.0.0-1", results[1].BundleName)
+	assert.Equal(t, "my-pkg.v1.0.0-2", results[0].Name)
+	assert.Equal(t, "my-pkg.v1.0.0-1", results[1].Name)
 }

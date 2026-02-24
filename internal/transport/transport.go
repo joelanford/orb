@@ -2,6 +2,8 @@ package transport
 
 import (
 	"fmt"
+	"os/user"
+	"path/filepath"
 	"strings"
 )
 
@@ -71,4 +73,14 @@ func ParseRef(s string) (Ref, error) {
 		}
 	}
 	return Ref{}, fmt.Errorf("unknown transport in %q", s)
+}
+
+// ExpandPath expands a leading ~ to the user's home directory.
+func ExpandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		if u, err := user.Current(); err == nil {
+			return filepath.Join(u.HomeDir, path[2:])
+		}
+	}
+	return path
 }

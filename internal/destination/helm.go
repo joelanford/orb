@@ -11,6 +11,7 @@ import (
 
 	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/helm"
+	"github.com/joelanford/orb/internal/transport"
 )
 
 type helmDocker struct {
@@ -46,7 +47,7 @@ type helmDir struct {
 }
 
 func (d *helmDir) Write(_ context.Context, b *bundle.RegistryV1) error {
-	ref := expandPath(d.ref)
+	ref := transport.ExpandPath(d.ref)
 	if _, err := os.Stat(ref); err == nil {
 		return fmt.Errorf("destination directory already exists: %s", ref)
 	}
@@ -81,7 +82,7 @@ type helmChartArchive struct {
 }
 
 func (d *helmChartArchive) Write(_ context.Context, b *bundle.RegistryV1) error {
-	ref := expandPath(d.ref)
+	ref := transport.ExpandPath(d.ref)
 	if _, err := os.Stat(ref); err == nil {
 		return fmt.Errorf("destination already exists: %s", ref)
 	}

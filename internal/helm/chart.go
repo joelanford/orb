@@ -62,77 +62,39 @@ func Generate(b *bundle.RegistryV1) (*chart.Chart, error) {
 	}
 
 	// Templates
-	var templates []*common.File
-
-	templates = append(templates, &common.File{
+	templates := []*common.File{{
 		Name: "templates/_helpers.tpl",
 		Data: generateHelpers(),
-	})
+	}}
 
-	saData, err := generateServiceAccounts(b)
-	if err != nil {
-		return nil, fmt.Errorf("generating serviceaccount templates: %w", err)
-	}
-	if len(saData) > 0 {
-		templates = append(templates, &common.File{Name: "templates/serviceaccount.yaml", Data: saData})
+	type templateGen struct {
+		name     string
+		generate func() ([]byte, error)
 	}
 
-	rbacData, err := generateRBAC(b)
-	if err != nil {
-		return nil, fmt.Errorf("generating rbac templates: %w", err)
+	generators := []templateGen{
+		{"templates/serviceaccount.yaml", func() ([]byte, error) { return generateServiceAccounts(b) }},
+		{"templates/clusterrole.yaml", func() ([]byte, error) { return generateRBAC(b) }},
+		{"templates/deployment.yaml", func() ([]byte, error) { return generateDeployments(b, webhookDeployments) }},
+		{"templates/crd.yaml", func() ([]byte, error) { return generateCRDs(b) }},
+		{"templates/additional.yaml", func() ([]byte, error) { return generateAdditional(b) }},
 	}
-	if len(rbacData) > 0 {
-		templates = append(templates, &common.File{Name: "templates/clusterrole.yaml", Data: rbacData})
-	}
-
-	depData, err := generateDeployments(b, webhookDeployments)
-	if err != nil {
-		return nil, fmt.Errorf("generating deployment templates: %w", err)
-	}
-	if len(depData) > 0 {
-		templates = append(templates, &common.File{Name: "templates/deployment.yaml", Data: depData})
-	}
-
-	crdData, err := generateCRDs(b)
-	if err != nil {
-		return nil, fmt.Errorf("generating crd templates: %w", err)
-	}
-	if len(crdData) > 0 {
-		templates = append(templates, &common.File{Name: "templates/crd.yaml", Data: crdData})
-	}
-
 	if hasWebhooks {
-		whData, err := generateWebhooks(b)
-		if err != nil {
-			return nil, fmt.Errorf("generating webhook templates: %w", err)
-		}
-		if len(whData) > 0 {
-			templates = append(templates, &common.File{Name: "templates/webhook.yaml", Data: whData})
-		}
-
-		svcData, err := generateWebhookServices(b)
-		if err != nil {
-			return nil, fmt.Errorf("generating service templates: %w", err)
-		}
-		if len(svcData) > 0 {
-			templates = append(templates, &common.File{Name: "templates/service.yaml", Data: svcData})
-		}
-
-		certData, err := generateCertProvider(b)
-		if err != nil {
-			return nil, fmt.Errorf("generating cert-manager templates: %w", err)
-		}
-		if len(certData) > 0 {
-			templates = append(templates, &common.File{Name: "templates/cert-manager.yaml", Data: certData})
-		}
+		generators = append(generators,
+			templateGen{"templates/webhook.yaml", func() ([]byte, error) { return generateWebhooks(b) }},
+			templateGen{"templates/service.yaml", func() ([]byte, error) { return generateWebhookServices(b) }},
+			templateGen{"templates/cert-manager.yaml", func() ([]byte, error) { return generateCertProvider(b) }},
+		)
 	}
 
-	addlData, err := generateAdditional(b)
-	if err != nil {
-		return nil, fmt.Errorf("generating additional templates: %w", err)
-	}
-	if len(addlData) > 0 {
-		templates = append(templates, &common.File{Name: "templates/additional.yaml", Data: addlData})
+	for _, g := range generators {
+		data, err := g.generate()
+		if err != nil {
+			return nil, fmt.Errorf("generating %s: %w", g.name, err)
+		}
+		if len(data) > 0 {
+			templates = append(templates, &common.File{Name: g.name, Data: data})
+		}
 	}
 
 	return &chart.Chart{
@@ -177,24 +139,27 @@ func escapeHelm(s string) string {
 	return strings.ReplaceAll(s, "{{", "{{ `{{` }}")
 }
 
-// toYAMLIndent marshals obj to YAML and indents each line by the given number of spaces.
-func toYAMLIndent(obj interface{}, indent int) (string, error) {
+// writeYAMLField marshals obj to YAML, writes "fieldName:" at the given indent,
+// then writes the marshaled value indented by (indent+2) spaces on subsequent lines.
+// All lines are escaped for Helm template syntax.
+func writeYAMLField(sb *strings.Builder, fieldName string, indent int, obj interface{}) {
+	fmt.Fprintf(sb, "%s%s:\n", strings.Repeat(" ", indent), fieldName)
+	writeYAMLFieldRaw(sb, indent+2, obj)
+}
+
+// writeYAMLFieldRaw marshals obj to YAML and writes each line at the given indent,
+// without a preceding field label. All lines are escaped for Helm template syntax.
+func writeYAMLFieldRaw(sb *strings.Builder, indent int, obj interface{}) {
 	data, err := yaml.Marshal(obj)
 	if err != nil {
-		return "", err
-	}
-	s := strings.TrimRight(string(data), "\n")
-	if indent <= 0 {
-		return s, nil
+		// All callers pass well-known Kubernetes API types that always marshal
+		// successfully, so a failure here indicates a programming error.
+		panic(fmt.Sprintf("yaml.Marshal: %v", err))
 	}
 	prefix := strings.Repeat(" ", indent)
-	lines := strings.Split(s, "\n")
-	for i, line := range lines {
-		if line != "" {
-			lines[i] = prefix + line
-		}
+	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+		sb.WriteString(prefix + escapeHelm(line) + "\n")
 	}
-	return strings.Join(lines, "\n"), nil
 }
 
 // escapeYAMLString returns a YAML-safe representation of a string value,
