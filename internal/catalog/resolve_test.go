@@ -44,7 +44,7 @@ func TestResolve_BasicMatch(t *testing.T) {
 	db := setupTestDB(t)
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
-			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"}},
+			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 			[]EntryData{{Name: "my-pkg.v1.0.0"}},
 		),
 	}
@@ -57,7 +57,7 @@ func TestResolve_BasicMatch(t *testing.T) {
 	assert.Equal(t, "test-cat", results[0].CatalogName)
 	assert.Equal(t, "my-pkg", results[0].PackageName)
 	assert.Equal(t, "my-pkg.v1.0.0", results[0].BundleName)
-	assert.Equal(t, "1.0.0", results[0].Version)
+	assert.Equal(t, mustVersionRelease("1.0.0", ""), results[0].VersionRelease)
 	assert.Equal(t, "reg.io/my-pkg:v1.0.0", results[0].Image)
 	assert.Equal(t, []string{"stable"}, results[0].Channels)
 }
@@ -66,7 +66,7 @@ func TestResolve_CatalogPriority(t *testing.T) {
 	db := setupTestDB(t)
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
-			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"}},
+			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 			[]EntryData{{Name: "my-pkg.v1.0.0"}},
 		),
 	}
@@ -84,7 +84,7 @@ func TestResolve_CatalogLabelSelector(t *testing.T) {
 		db := setupTestDB(t)
 		pkgData := map[string]*PackageData{
 			"my-pkg": makeTestPackageData("stable",
-				[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"}},
+				[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 				[]EntryData{{Name: "my-pkg.v1.0.0"}},
 			),
 		}
@@ -99,7 +99,7 @@ func TestResolve_CatalogLabelSelector(t *testing.T) {
 		db := setupTestDB(t)
 		pkgData := map[string]*PackageData{
 			"my-pkg": makeTestPackageData("stable",
-				[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"}},
+				[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 				[]EntryData{{Name: "my-pkg.v1.0.0"}},
 			),
 		}
@@ -119,7 +119,7 @@ func TestResolve_ChannelFilter(t *testing.T) {
 				{Name: "stable", Entries: []EntryData{{Name: "my-pkg.v1.0.0"}}},
 				{Name: "beta", Entries: []EntryData{{Name: "my-pkg.v1.0.0"}}},
 			},
-			Bundles: []BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"}},
+			Bundles: []BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 		},
 	}
 	addTestCatalog(t, db, "test-cat", 1, nil, pkgData)
@@ -134,7 +134,7 @@ func TestResolve_ChannelFilter_NoMatch(t *testing.T) {
 	db := setupTestDB(t)
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
-			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"}},
+			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 			[]EntryData{{Name: "my-pkg.v1.0.0"}},
 		),
 	}
@@ -150,10 +150,10 @@ func TestResolve_VersionConstraint(t *testing.T) {
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
 			[]BundleData{
-				{Name: "my-pkg.v0.9.0", Image: "reg.io/my-pkg:v0.9.0", Version: "0.9.0"},
-				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"},
-				{Name: "my-pkg.v1.5.0", Image: "reg.io/my-pkg:v1.5.0", Version: "1.5.0"},
-				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", Version: "2.0.0"},
+				{Name: "my-pkg.v0.9.0", Image: "reg.io/my-pkg:v0.9.0", VersionRelease: mustVersionRelease("0.9.0", "")},
+				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")},
+				{Name: "my-pkg.v1.5.0", Image: "reg.io/my-pkg:v1.5.0", VersionRelease: mustVersionRelease("1.5.0", "")},
+				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", VersionRelease: mustVersionRelease("2.0.0", "")},
 			},
 			[]EntryData{
 				{Name: "my-pkg.v0.9.0"},
@@ -168,8 +168,8 @@ func TestResolve_VersionConstraint(t *testing.T) {
 	results, err := Resolve(db, "my-pkg", ResolveOptions{Version: ">=1.0.0 <2.0.0"})
 	require.NoError(t, err)
 	require.Len(t, results, 2)
-	assert.Equal(t, "1.5.0", results[0].Version)
-	assert.Equal(t, "1.0.0", results[1].Version)
+	assert.Equal(t, mustVersionRelease("1.5.0", ""), results[0].VersionRelease)
+	assert.Equal(t, mustVersionRelease("1.0.0", ""), results[1].VersionRelease)
 }
 
 func TestResolve_VersionConstraint_Invalid(t *testing.T) {
@@ -184,8 +184,8 @@ func TestResolve_InstalledVersion_Replaces(t *testing.T) {
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
 			[]BundleData{
-				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"},
-				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", Version: "2.0.0"},
+				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")},
+				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", VersionRelease: mustVersionRelease("2.0.0", "")},
 			},
 			[]EntryData{
 				{Name: "my-pkg.v1.0.0"},
@@ -209,8 +209,8 @@ func TestResolve_InstalledVersion_Skips(t *testing.T) {
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
 			[]BundleData{
-				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"},
-				{Name: "my-pkg.v3.0.0", Image: "reg.io/my-pkg:v3.0.0", Version: "3.0.0"},
+				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")},
+				{Name: "my-pkg.v3.0.0", Image: "reg.io/my-pkg:v3.0.0", VersionRelease: mustVersionRelease("3.0.0", "")},
 			},
 			[]EntryData{
 				{Name: "my-pkg.v1.0.0"},
@@ -234,8 +234,8 @@ func TestResolve_InstalledVersion_SkipRange(t *testing.T) {
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
 			[]BundleData{
-				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"},
-				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", Version: "2.0.0"},
+				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")},
+				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", VersionRelease: mustVersionRelease("2.0.0", "")},
 			},
 			[]EntryData{
 				{Name: "my-pkg.v1.0.0"},
@@ -259,8 +259,8 @@ func TestResolve_InstalledVersion_NoSuccessor(t *testing.T) {
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
 			[]BundleData{
-				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"},
-				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", Version: "2.0.0"},
+				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")},
+				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", VersionRelease: mustVersionRelease("2.0.0", "")},
 			},
 			[]EntryData{
 				{Name: "my-pkg.v1.0.0"},
@@ -283,9 +283,9 @@ func TestResolve_SortOrder(t *testing.T) {
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
 			[]BundleData{
-				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"},
-				{Name: "my-pkg.v3.0.0", Image: "reg.io/my-pkg:v3.0.0", Version: "3.0.0"},
-				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", Version: "2.0.0"},
+				{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")},
+				{Name: "my-pkg.v3.0.0", Image: "reg.io/my-pkg:v3.0.0", VersionRelease: mustVersionRelease("3.0.0", "")},
+				{Name: "my-pkg.v2.0.0", Image: "reg.io/my-pkg:v2.0.0", VersionRelease: mustVersionRelease("2.0.0", "")},
 			},
 			[]EntryData{
 				{Name: "my-pkg.v1.0.0"},
@@ -299,9 +299,9 @@ func TestResolve_SortOrder(t *testing.T) {
 	results, err := Resolve(db, "my-pkg", ResolveOptions{})
 	require.NoError(t, err)
 	require.Len(t, results, 3)
-	assert.Equal(t, "3.0.0", results[0].Version)
-	assert.Equal(t, "2.0.0", results[1].Version)
-	assert.Equal(t, "1.0.0", results[2].Version)
+	assert.Equal(t, mustVersionRelease("3.0.0", ""), results[0].VersionRelease)
+	assert.Equal(t, mustVersionRelease("2.0.0", ""), results[1].VersionRelease)
+	assert.Equal(t, mustVersionRelease("1.0.0", ""), results[2].VersionRelease)
 }
 
 func TestResolve_InvalidInstalledVersion(t *testing.T) {
@@ -384,7 +384,7 @@ func TestResolve_CatalogLabelSelector_MatchByName(t *testing.T) {
 	db := setupTestDB(t)
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
-			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"}},
+			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 			[]EntryData{{Name: "my-pkg.v1.0.0"}},
 		),
 	}
@@ -406,7 +406,7 @@ func TestResolve_BundleInMultipleChannels(t *testing.T) {
 				{Name: "beta", Entries: []EntryData{{Name: "my-pkg.v1.0.0"}}},
 				{Name: "stable", Entries: []EntryData{{Name: "my-pkg.v1.0.0"}}},
 			},
-			Bundles: []BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"}},
+			Bundles: []BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 		},
 	}
 	addTestCatalog(t, db, "test-cat", 1, nil, pkgData)
@@ -422,7 +422,7 @@ func TestResolve_EmptyCatalog(t *testing.T) {
 	db := setupTestDB(t)
 	pkgData := map[string]*PackageData{
 		"my-pkg": makeTestPackageData("stable",
-			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", Version: "1.0.0"}},
+			[]BundleData{{Name: "my-pkg.v1.0.0", Image: "reg.io/my-pkg:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 			[]EntryData{{Name: "my-pkg.v1.0.0"}},
 		),
 	}
@@ -440,11 +440,11 @@ func TestResolve_FlatFBCLayout(t *testing.T) {
 	db := setupTestDB(t)
 	pkgData := map[string]*PackageData{
 		"pkg-a": makeTestPackageData("stable",
-			[]BundleData{{Name: "pkg-a.v1.0.0", Image: "reg.io/pkg-a:v1.0.0", Version: "1.0.0"}},
+			[]BundleData{{Name: "pkg-a.v1.0.0", Image: "reg.io/pkg-a:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")}},
 			[]EntryData{{Name: "pkg-a.v1.0.0"}},
 		),
 		"pkg-b": makeTestPackageData("stable",
-			[]BundleData{{Name: "pkg-b.v2.0.0", Image: "reg.io/pkg-b:v2.0.0", Version: "2.0.0"}},
+			[]BundleData{{Name: "pkg-b.v2.0.0", Image: "reg.io/pkg-b:v2.0.0", VersionRelease: mustVersionRelease("2.0.0", "")}},
 			[]EntryData{{Name: "pkg-b.v2.0.0"}},
 		),
 	}
@@ -459,4 +459,60 @@ func TestResolve_FlatFBCLayout(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resultsB, 1)
 	assert.Equal(t, "pkg-b.v2.0.0", resultsB[0].BundleName)
+}
+
+func TestResolve_SortOrder_SameVersionDifferentRelease(t *testing.T) {
+	db := setupTestDB(t)
+
+	pkgData := map[string]*PackageData{
+		"my-pkg": makeTestPackageData("stable",
+			[]BundleData{
+				{Name: "my-pkg.v1.0.0-1", Image: "reg.io/my-pkg:v1.0.0-1", VersionRelease: mustVersionRelease("1.0.0", "1")},
+				{Name: "my-pkg.v1.0.0-3", Image: "reg.io/my-pkg:v1.0.0-3", VersionRelease: mustVersionRelease("1.0.0", "3")},
+				{Name: "my-pkg.v1.0.0-2", Image: "reg.io/my-pkg:v1.0.0-2", VersionRelease: mustVersionRelease("1.0.0", "2")},
+			},
+			[]EntryData{
+				{Name: "my-pkg.v1.0.0-1"},
+				{Name: "my-pkg.v1.0.0-3"},
+				{Name: "my-pkg.v1.0.0-2"},
+			},
+		),
+	}
+	addTestCatalog(t, db, "test-cat", 1, nil, pkgData)
+
+	results, err := Resolve(db, "my-pkg", ResolveOptions{})
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+
+	// Should be sorted by release descending: 3, 2, 1
+	assert.Equal(t, "my-pkg.v1.0.0-3", results[0].BundleName)
+	assert.Equal(t, "my-pkg.v1.0.0-2", results[1].BundleName)
+	assert.Equal(t, "my-pkg.v1.0.0-1", results[2].BundleName)
+}
+
+func TestResolve_VersionConstraint_MatchesBothReleases(t *testing.T) {
+	db := setupTestDB(t)
+
+	pkgData := map[string]*PackageData{
+		"my-pkg": makeTestPackageData("stable",
+			[]BundleData{
+				{Name: "my-pkg.v1.0.0-1", Image: "reg.io/my-pkg:v1.0.0-1", VersionRelease: mustVersionRelease("1.0.0", "1")},
+				{Name: "my-pkg.v1.0.0-2", Image: "reg.io/my-pkg:v1.0.0-2", VersionRelease: mustVersionRelease("1.0.0", "2")},
+				{Name: "my-pkg.v2.0.0-1", Image: "reg.io/my-pkg:v2.0.0-1", VersionRelease: mustVersionRelease("2.0.0", "1")},
+			},
+			[]EntryData{
+				{Name: "my-pkg.v1.0.0-1"},
+				{Name: "my-pkg.v1.0.0-2"},
+				{Name: "my-pkg.v2.0.0-1"},
+			},
+		),
+	}
+	addTestCatalog(t, db, "test-cat", 1, nil, pkgData)
+
+	// Version constraint filters on Version only, so both 1.0.0 releases match
+	results, err := Resolve(db, "my-pkg", ResolveOptions{Version: ">=1.0.0 <2.0.0"})
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	assert.Equal(t, "my-pkg.v1.0.0-2", results[0].BundleName)
+	assert.Equal(t, "my-pkg.v1.0.0-1", results[1].BundleName)
 }

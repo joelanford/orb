@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/Masterminds/semver/v3"
+	"github.com/joelanford/orb/internal/bundle"
 	"github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v8"
@@ -215,11 +215,7 @@ func runCatalogInfo(cmd *cobra.Command, packageName string) error {
 		}
 		if len(pd.Bundles) > 0 {
 			latest := latestVersion(pd.Bundles)
-			if latest != "" {
-				fmt.Fprintf(out, "Versions:      %d (latest: %s)\n", len(pd.Bundles), latest)
-			} else {
-				fmt.Fprintf(out, "Versions:      %d\n", len(pd.Bundles))
-			}
+			fmt.Fprintf(out, "Versions:      %d (latest: %s)\n", len(pd.Bundles), latest)
 		}
 		return nil
 	}
@@ -227,23 +223,14 @@ func runCatalogInfo(cmd *cobra.Command, packageName string) error {
 	return fmt.Errorf("package %q not found in any catalog", packageName)
 }
 
-func latestVersion(bundles []catalog.BundleData) string {
-	var latest string
-	var latestSemver *semver.Version
+func latestVersion(bundles []catalog.BundleData) *bundle.VersionRelease {
+	var latestVersionRelease *bundle.VersionRelease
 	for _, b := range bundles {
-		if b.Version == "" {
-			continue
-		}
-		v, err := semver.NewVersion(b.Version)
-		if err != nil {
-			continue
-		}
-		if latestSemver == nil || v.GreaterThan(latestSemver) {
-			latestSemver = v
-			latest = b.Version
+		if latestVersionRelease == nil || b.Compare(*latestVersionRelease) > 0 {
+			latestVersionRelease = &b.VersionRelease
 		}
 	}
-	return latest
+	return latestVersionRelease
 }
 
 func newCatalogSearchCmd() *cobra.Command {
@@ -909,7 +896,7 @@ func printResolveResults(out io.Writer, results []catalog.ResolveResult, format 
 		for _, r := range results {
 			fmt.Fprintf(w, "%s\t%s\t%s\n",
 				r.CatalogName,
-				r.Version,
+				r.VersionRelease,
 				r.Image,
 			)
 		}

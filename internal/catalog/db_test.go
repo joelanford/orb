@@ -213,7 +213,7 @@ func TestDB_CascadeDelete(t *testing.T) {
 	require.NoError(t, db.SetPackageData("cat1", map[string]*PackageData{
 		"pkg1": {
 			Channels: []ChannelData{{Name: "stable", Entries: []EntryData{{Name: "pkg1.v1.0.0"}}}},
-			Bundles:  []BundleData{{Name: "pkg1.v1.0.0", Image: "img", Version: "1.0.0"}},
+			Bundles:  []BundleData{{Name: "pkg1.v1.0.0", Image: "img", VersionRelease: mustVersionRelease("1.0.0", "")}},
 		},
 	}))
 
@@ -259,9 +259,9 @@ func TestDB_PackageData(t *testing.T) {
 					},
 				},
 				Bundles: []BundleData{
-					{Name: "pkg1.v1.0.0", Image: "reg.io/pkg1:v1.0.0", Version: "1.0.0"},
-					{Name: "pkg1.v2.0.0", Image: "reg.io/pkg1:v2.0.0", Version: "2.0.0", RelatedImages: []string{"reg.io/sidecar:v2"}},
-					{Name: "pkg1.v3.0.0", Image: "reg.io/pkg1:v3.0.0", Version: "3.0.0", RelatedImages: []string{"reg.io/init:v3", "reg.io/sidecar:v3"}},
+					{Name: "pkg1.v1.0.0", Image: "reg.io/pkg1:v1.0.0", VersionRelease: mustVersionRelease("1.0.0", "")},
+					{Name: "pkg1.v2.0.0", Image: "reg.io/pkg1:v2.0.0", VersionRelease: mustVersionRelease("2.0.0", ""), RelatedImages: []string{"reg.io/sidecar:v2"}},
+					{Name: "pkg1.v3.0.0", Image: "reg.io/pkg1:v3.0.0", VersionRelease: mustVersionRelease("3.0.0", ""), RelatedImages: []string{"reg.io/init:v3", "reg.io/sidecar:v3"}},
 				},
 			},
 		}
@@ -289,14 +289,14 @@ func TestDB_PackageData(t *testing.T) {
 
 		first := map[string]*PackageData{
 			"pkg1": {
-				Bundles: []BundleData{{Name: "pkg1.v1.0.0", Image: "img1", Version: "1.0.0"}},
+				Bundles: []BundleData{{Name: "pkg1.v1.0.0", Image: "img1", VersionRelease: mustVersionRelease("1.0.0", "")}},
 			},
 		}
 		require.NoError(t, db.SetPackageData("cat1", first))
 
 		second := map[string]*PackageData{
 			"pkg1": {
-				Bundles: []BundleData{{Name: "pkg1.v2.0.0", Image: "img2", Version: "2.0.0"}},
+				Bundles: []BundleData{{Name: "pkg1.v2.0.0", Image: "img2", VersionRelease: mustVersionRelease("2.0.0", "")}},
 			},
 		}
 		require.NoError(t, db.SetPackageData("cat1", second))
@@ -313,8 +313,8 @@ func TestDB_PackageData(t *testing.T) {
 		require.NoError(t, db.AddCatalog(Catalog{Name: "cat1", Ref: "ref1"}))
 
 		pkgs := map[string]*PackageData{
-			"pkg1": {Bundles: []BundleData{{Name: "pkg1.v1.0.0", Image: "img1", Version: "1.0.0"}}},
-			"pkg2": {Bundles: []BundleData{{Name: "pkg2.v1.0.0", Image: "img2", Version: "1.0.0"}}},
+			"pkg1": {Bundles: []BundleData{{Name: "pkg1.v1.0.0", Image: "img1", VersionRelease: mustVersionRelease("1.0.0", "")}}},
+			"pkg2": {Bundles: []BundleData{{Name: "pkg2.v1.0.0", Image: "img2", VersionRelease: mustVersionRelease("1.0.0", "")}}},
 		}
 		require.NoError(t, db.SetPackageData("cat1", pkgs))
 
@@ -334,10 +334,10 @@ func TestDB_SearchPackageData(t *testing.T) {
 		require.NoError(t, db.AddCatalog(Catalog{Name: "low", Ref: "r", Priority: 1}))
 		require.NoError(t, db.AddCatalog(Catalog{Name: "high", Ref: "r", Priority: 10}))
 		require.NoError(t, db.SetPackageData("low", map[string]*PackageData{
-			"pkg-low": {DisplayName: "Low Package", Bundles: []BundleData{{Name: "pkg-low.v1.0.0", Image: "img", Version: "1.0.0"}}},
+			"pkg-low": {DisplayName: "Low Package", Bundles: []BundleData{{Name: "pkg-low.v1.0.0", Image: "img", VersionRelease: mustVersionRelease("1.0.0", "")}}},
 		}))
 		require.NoError(t, db.SetPackageData("high", map[string]*PackageData{
-			"pkg-high": {DisplayName: "High Package", Bundles: []BundleData{{Name: "pkg-high.v1.0.0", Image: "img", Version: "1.0.0"}}},
+			"pkg-high": {DisplayName: "High Package", Bundles: []BundleData{{Name: "pkg-high.v1.0.0", Image: "img", VersionRelease: mustVersionRelease("1.0.0", "")}}},
 		}))
 
 		var visited []string
@@ -355,9 +355,9 @@ func TestDB_SearchPackageData(t *testing.T) {
 		db := setupTestDB(t)
 		require.NoError(t, db.AddCatalog(Catalog{Name: "cat1", Ref: "r"}))
 		require.NoError(t, db.SetPackageData("cat1", map[string]*PackageData{
-			"aaa": {Bundles: []BundleData{{Name: "aaa.v1.0.0", Image: "img", Version: "1.0.0"}}},
-			"bbb": {Bundles: []BundleData{{Name: "bbb.v1.0.0", Image: "img", Version: "1.0.0"}}},
-			"ccc": {Bundles: []BundleData{{Name: "ccc.v1.0.0", Image: "img", Version: "1.0.0"}}},
+			"aaa": {Bundles: []BundleData{{Name: "aaa.v1.0.0", Image: "img", VersionRelease: mustVersionRelease("1.0.0", "")}}},
+			"bbb": {Bundles: []BundleData{{Name: "bbb.v1.0.0", Image: "img", VersionRelease: mustVersionRelease("1.0.0", "")}}},
+			"ccc": {Bundles: []BundleData{{Name: "ccc.v1.0.0", Image: "img", VersionRelease: mustVersionRelease("1.0.0", "")}}},
 		}))
 
 		var visited []string
@@ -389,7 +389,7 @@ func TestDB_SearchPackageData(t *testing.T) {
 				Description: "Manages Vault clusters",
 				Keywords:    []string{"security", "vault"},
 				Channels:    []ChannelData{{Name: "stable", Entries: []EntryData{{Name: "vault.v1.0.0"}}}},
-				Bundles:     []BundleData{{Name: "vault.v1.0.0", Image: "img", Version: "1.0.0"}},
+				Bundles:     []BundleData{{Name: "vault.v1.0.0", Image: "img", VersionRelease: mustVersionRelease("1.0.0", "")}},
 			},
 		}))
 
@@ -447,4 +447,32 @@ func TestResolve_AfterBuildPackageData(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "redis.v2.0.0", results[0].BundleName)
+}
+
+func TestDB_PackageData_RoundTripWithRelease(t *testing.T) {
+	db := setupTestDB(t)
+	require.NoError(t, db.AddCatalog(Catalog{Name: "cat1", Ref: "ref1"}))
+
+	input := map[string]*PackageData{
+		"pkg1": {
+			Channels: []ChannelData{{
+				Name: "stable",
+				Entries: []EntryData{
+					{Name: "pkg1.v1.0.0-2"},
+					{Name: "pkg1.v1.0.0-3"},
+				},
+			}},
+			Bundles: []BundleData{
+				{Name: "pkg1.v1.0.0-2", Image: "reg.io/pkg1:v1.0.0-2", VersionRelease: mustVersionRelease("1.0.0", "2")},
+				{Name: "pkg1.v1.0.0-3", Image: "reg.io/pkg1:v1.0.0-3", VersionRelease: mustVersionRelease("1.0.0", "3")},
+			},
+		},
+	}
+
+	require.NoError(t, db.SetPackageData("cat1", input))
+
+	pd, err := db.GetPackageData("cat1", "pkg1")
+	require.NoError(t, err)
+	require.NotNil(t, pd)
+	assert.Equal(t, input["pkg1"], pd)
 }

@@ -1,13 +1,14 @@
 package catalog
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
+	mmsemver "github.com/Masterminds/semver/v3"
 	bsemver "github.com/blang/semver/v4"
+	"github.com/joelanford/orb/internal/bundle"
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -15,19 +16,19 @@ import (
 type ResolveOptions struct {
 	CatalogLabelSelector string   // Kubernetes label selector string (parsed via labels.Parse)
 	Channels             []string // Channel names to search (empty = all channels)
-	Version              string   // Masterminds semver constraint
+	Version              string   // Masterminds mmsemver constraint
 	InstalledName        string   // Installed bundle name (for successor filtering)
 	InstalledVersion     string   // Installed bundle version (for skipRange matching)
 }
 
 // ResolveResult holds a resolved bundle and all channels it appears in.
 type ResolveResult struct {
-	CatalogName string   `json:"catalog"`
-	PackageName string   `json:"package"`
-	Channels    []string `json:"channels"`
-	BundleName  string   `json:"bundle"`
-	Version     string   `json:"version"`
-	Image       string   `json:"image"`
+	CatalogName           string   `json:"catalog"`
+	PackageName           string   `json:"package"`
+	Channels              []string `json:"channels"`
+	BundleName            string   `json:"bundle"`
+	bundle.VersionRelease `json:",inline"`
+	Image                 string `json:"image"`
 }
 
 // Resolve iterates catalogs in priority order, returning all matching bundles
@@ -42,10 +43,10 @@ func Resolve(db *DB, packageName string, opts ResolveOptions) ([]ResolveResult, 
 		}
 	}
 
-	var versionConstraint *semver.Constraints
+	var versionConstraint bsemver.Range
 	if opts.Version != "" {
 		var err error
-		versionConstraint, err = semver.NewConstraint(opts.Version)
+		versionConstraint, err = mastermindsConstraintToBlangRange(opts.Version)
 		if err != nil {
 			return nil, fmt.Errorf("parsing version constraint: %w", err)
 		}
@@ -100,7 +101,7 @@ func resolveFromPackageData(
 	packageName string,
 	pkgData *PackageData,
 	channels []string,
-	versionConstraint *semver.Constraints,
+	versionConstraint bsemver.Range,
 	installedName string,
 	installedVersion *bsemver.Version,
 ) ([]ResolveResult, error) {
@@ -132,7 +133,6 @@ func resolveFromPackageData(
 	// Collect all matching bundles, tracking which channels each appears in.
 	type candidate struct {
 		result  ResolveResult
-		semver  *semver.Version
 		chanSet map[string]struct{}
 	}
 	candidates := make(map[string]*candidate)
@@ -144,16 +144,7 @@ func resolveFromPackageData(
 				continue
 			}
 
-			if b.Version == "" {
-				continue
-			}
-
-			sv, err := semver.NewVersion(b.Version)
-			if err != nil {
-				continue
-			}
-
-			if versionConstraint != nil && !versionConstraint.Check(sv) {
+			if versionConstraint != nil && !versionConstraint(b.Version) {
 				continue
 			}
 
@@ -168,13 +159,12 @@ func resolveFromPackageData(
 			} else {
 				candidates[entry.Name] = &candidate{
 					result: ResolveResult{
-						CatalogName: cat.Name,
-						PackageName: packageName,
-						BundleName:  entry.Name,
-						Version:     b.Version,
-						Image:       b.Image,
+						CatalogName:    cat.Name,
+						PackageName:    packageName,
+						BundleName:     entry.Name,
+						VersionRelease: b.VersionRelease,
+						Image:          b.Image,
 					},
-					semver:  sv,
 					chanSet: map[string]struct{}{ch.Name: {}},
 				}
 			}
@@ -192,10 +182,7 @@ func resolveFromPackageData(
 		sorted = append(sorted, c)
 	}
 	slices.SortFunc(sorted, func(a, b *candidate) int {
-		if vc := b.semver.Compare(a.semver); vc != 0 {
-			return vc
-		}
-		return cmp.Compare(a.result.BundleName, b.result.BundleName)
+		return b.result.Compare(a.result.VersionRelease)
 	})
 	for _, c := range sorted {
 		chans := make([]string, 0, len(c.chanSet))
@@ -221,7 +208,7 @@ func isSuccessor(candidate EntryData, installedName string, installedVersion bse
 		return true
 	}
 
-	// SkipRange (blang/semver range)
+	// SkipRange (blang/mmsemver range)
 	if candidate.SkipRange != "" {
 		rng, err := bsemver.ParseRange(candidate.SkipRange)
 		if err == nil && rng(installedVersion) {
@@ -235,4 +222,16 @@ func isSuccessor(candidate EntryData, installedName string, installedVersion bse
 // ChannelsString returns a comma-separated string of channel names.
 func (r ResolveResult) ChannelsString() string {
 	return strings.Join(r.Channels, ",")
+}
+
+func mastermindsConstraintToBlangRange(constraintStr string) (bsemver.Range, error) {
+	c, err := mmsemver.NewConstraint(constraintStr)
+	if err != nil {
+		return nil, fmt.Errorf("parsing constraint %q: %w", constraintStr, err)
+	}
+	return func(v bsemver.Version) bool {
+		pre := lo.Map(v.Pre, func(p bsemver.PRVersion, _ int) string { return p.String() })
+		mmv := mmsemver.New(v.Major, v.Minor, v.Patch, strings.Join(pre, "."), strings.Join(v.Build, "."))
+		return c.Check(mmv)
+	}, nil
 }
