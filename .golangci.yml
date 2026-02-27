@@ -29,6 +29,9 @@ linters:
           disabled: true
 
   exclusions:
+    paths:
+      - internal/termimage/internal/rasterx
+      - internal/termimage/internal/oksvg
     rules:
       - path: internal/image/
         linters: [revive]
