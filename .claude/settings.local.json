@@ -22,7 +22,8 @@
       "Bash(make build:*)",
       "Bash(make test:*)",
       "Bash(tail:*)",
-      "Bash(make lint:*)"
+      "Bash(make lint:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

@@ -23,9 +23,11 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/term"
 
 	"github.com/joelanford/orb/internal/catalog"
 	"github.com/joelanford/orb/internal/image"
+	"github.com/joelanford/orb/internal/termimage"
 	"github.com/joelanford/orb/internal/transport"
 )
 
@@ -145,23 +147,34 @@ func runCatalogEdit(cmd *cobra.Command, name string, opts *catalogEditOptions) e
 	return nil
 }
 
+type catalogInfoOptions struct {
+	noIcon bool
+}
+
 func newCatalogInfoCmd() *cobra.Command {
-	return &cobra.Command{
+	opts := &catalogInfoOptions{}
+
+	cmd := &cobra.Command{
 		Use:   "info PACKAGE",
 		Short: "Show details for a package",
 		Long: `Display detailed information about a package from the highest-priority catalog that contains it.
 
 Examples:
   orb catalog info vault
-  orb catalog info cert-manager`,
+  orb catalog info cert-manager
+  orb catalog info --no-icon vault`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCatalogInfo(cmd, args[0])
+			return runCatalogInfo(cmd, args[0], opts)
 		},
 	}
+
+	cmd.Flags().BoolVar(&opts.noIcon, "no-icon", false, "Suppress icon display")
+
+	return cmd
 }
 
-func runCatalogInfo(cmd *cobra.Command, packageName string) error {
+func runCatalogInfo(cmd *cobra.Command, packageName string, opts *catalogInfoOptions) error {
 	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
@@ -183,6 +196,16 @@ func runCatalogInfo(cmd *cobra.Command, packageName string) error {
 		}
 
 		out := cmd.OutOrStdout()
+
+		// Render icon if available and not suppressed.
+		if !opts.noIcon && pd.Icon != nil && len(pd.Icon.Data) > 0 {
+			if f, ok := out.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+				if err := termimage.Render(out, pd.Icon.Data, pd.Icon.MediaType, 80); err == nil {
+					fmt.Fprintln(out)
+				}
+			}
+		}
+
 		bold := lipgloss.NewStyle().Bold(true)
 		fmt.Fprintf(out, "%s %s\n", bold.Render("Package:"), packageName)
 		if pd.DisplayName != "" {
