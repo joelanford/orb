@@ -10,8 +10,9 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"text/tabwriter"
 
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v8"
@@ -27,10 +28,6 @@ import (
 	"github.com/joelanford/orb/internal/image"
 	"github.com/joelanford/orb/internal/transport"
 )
-
-func newTabWriter(out io.Writer) *tabwriter.Writer {
-	return tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-}
 
 func newCatalogCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -186,27 +183,28 @@ func runCatalogInfo(cmd *cobra.Command, packageName string) error {
 		}
 
 		out := cmd.OutOrStdout()
-		fmt.Fprintf(out, "Package:       %s\n", packageName)
+		bold := lipgloss.NewStyle().Bold(true)
+		fmt.Fprintf(out, "%s %s\n", bold.Render("Package:"), packageName)
 		if pd.DisplayName != "" {
-			fmt.Fprintf(out, "Display Name:  %s\n", pd.DisplayName)
+			fmt.Fprintf(out, "%s %s\n", bold.Render("Display Name:"), pd.DisplayName)
 		}
-		fmt.Fprintf(out, "Catalog:       %s\n", cat.Name)
+		fmt.Fprintf(out, "%s %s\n", bold.Render("Catalog:"), cat.Name)
 		if pd.Description != "" {
-			fmt.Fprintf(out, "Description:   %s\n", pd.Description)
+			fmt.Fprintf(out, "%s %s\n", bold.Render("Description:"), pd.Description)
 		}
 		if len(pd.Keywords) > 0 {
-			fmt.Fprintf(out, "Keywords:      %s\n", strings.Join(pd.Keywords, ", "))
+			fmt.Fprintf(out, "%s %s\n", bold.Render("Keywords:"), strings.Join(pd.Keywords, ", "))
 		}
 		if len(pd.Channels) > 0 {
 			channelNames := make([]string, len(pd.Channels))
 			for i, ch := range pd.Channels {
 				channelNames[i] = ch.Name
 			}
-			fmt.Fprintf(out, "Channels:      %s\n", strings.Join(channelNames, ", "))
+			fmt.Fprintf(out, "%s %s\n", bold.Render("Channels:"), strings.Join(channelNames, ", "))
 		}
 		if len(pd.Bundles) > 0 {
 			latest := slices.MaxFunc(pd.Bundles, catalog.CompareBundleData)
-			fmt.Fprintf(out, "Versions:      %d (latest: %s)\n", len(pd.Bundles), latest.VersionRelease)
+			fmt.Fprintf(out, "%s %d (latest: %s)\n", bold.Render("Versions:"), len(pd.Bundles), latest.VersionRelease)
 		}
 		return nil
 	}
@@ -214,28 +212,45 @@ func runCatalogInfo(cmd *cobra.Command, packageName string) error {
 	return fmt.Errorf("package %q not found in any catalog", packageName)
 }
 
-func newCatalogSearchCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "search KEYWORD",
-		Short: "Search packages by keyword",
-		Long: `Search for packages across all catalogs by keyword.
-
-The keyword is matched (case-insensitive) against the package name, display name,
-description, and keyword entries. Results are deduplicated by package name, keeping
-the match from the highest-priority catalog.
-
-Examples:
-  orb catalog search vault
-  orb catalog search security
-  orb catalog search certificate`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCatalogSearch(cmd, args[0])
-		},
-	}
+type catalogSearchOptions struct {
+	includeShadowed bool
 }
 
-func runCatalogSearch(cmd *cobra.Command, keyword string) error {
+func newCatalogSearchCmd() *cobra.Command {
+	opts := &catalogSearchOptions{}
+
+	cmd := &cobra.Command{
+		Use:   "search [KEYWORD]",
+		Short: "Search or list packages across catalogs",
+		Long: `Search for packages across all catalogs by keyword, or list all packages
+when no keyword is given.
+
+The keyword is matched (case-insensitive) against the package name, display name,
+description, and keyword entries. By default, only the highest-priority entry for
+each package is shown. Use --include-shadowed to also show lower-priority duplicates,
+which are marked with * and dimmed.
+
+Examples:
+  orb catalog search
+  orb catalog search vault
+  orb catalog search security
+  orb catalog search --include-shadowed`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var keyword string
+			if len(args) > 0 {
+				keyword = args[0]
+			}
+			return runCatalogSearch(cmd, keyword, opts)
+		},
+	}
+
+	cmd.Flags().BoolVar(&opts.includeShadowed, "include-shadowed", false, "Include lower-priority duplicates shadowed by higher-priority catalogs")
+
+	return cmd
+}
+
+func runCatalogSearch(cmd *cobra.Command, keyword string, opts *catalogSearchOptions) error {
 	db, err := catalog.OpenDefaultDB()
 	if err != nil {
 		return err
@@ -246,6 +261,7 @@ func runCatalogSearch(cmd *cobra.Command, keyword string) error {
 		catalogName string
 		packageName string
 		displayName string
+		shadowed    bool
 	}
 
 	seen := make(map[string]struct{})
@@ -253,35 +269,77 @@ func runCatalogSearch(cmd *cobra.Command, keyword string) error {
 	lowerKeyword := strings.ToLower(keyword)
 
 	err = db.SearchPackageData(func(catalogName, packageName string, pd *catalog.PackageData) bool {
-		if _, ok := seen[packageName]; ok {
+		if keyword != "" && !matchesKeyword(lowerKeyword, packageName, pd) {
 			return true
 		}
 
-		if matchesKeyword(lowerKeyword, packageName, pd) {
-			seen[packageName] = struct{}{}
-			results = append(results, searchResult{
-				catalogName: catalogName,
-				packageName: packageName,
-				displayName: pd.DisplayName,
-			})
+		_, shadowed := seen[packageName]
+		seen[packageName] = struct{}{}
+		if shadowed && !opts.includeShadowed {
+			return true
 		}
+		results = append(results, searchResult{
+			catalogName: catalogName,
+			packageName: packageName,
+			displayName: pd.DisplayName,
+			shadowed:    shadowed,
+		})
 		return true
 	})
 	if err != nil {
 		return err
 	}
 
+	slices.SortStableFunc(results, func(a, b searchResult) int {
+		return strings.Compare(a.packageName, b.packageName)
+	})
+
 	if len(results) == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "No packages found matching %q.\n", keyword)
+		if keyword != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "No packages found matching %q.\n", keyword)
+		} else {
+			fmt.Fprintln(cmd.OutOrStdout(), "No packages found.")
+		}
 		return nil
 	}
 
-	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "CATALOG\tPACKAGE\tDISPLAY NAME")
-	for _, r := range results {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", r.catalogName, r.packageName, r.displayName)
+	out := cmd.OutOrStdout()
+
+	hasShadowed := false
+	shadowedRows := make(map[int]bool)
+	var rows [][]string
+	for i, r := range results {
+		catName := r.catalogName
+		if r.shadowed {
+			catName += "*"
+			hasShadowed = true
+			shadowedRows[i] = true
+		}
+		rows = append(rows, []string{r.packageName, r.displayName, catName})
 	}
-	return w.Flush()
+
+	baseStyle := lipgloss.NewStyle().PaddingRight(2)
+	t := table.New().
+		Headers("PACKAGE", "DISPLAY NAME", "CATALOG").
+		Rows(rows...).
+		BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderHeader(false).
+		BorderColumn(false).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row >= 0 && shadowedRows[row] {
+				return baseStyle.Faint(true)
+			}
+			return baseStyle
+		})
+
+	fmt.Fprintln(out, t.Render())
+	if hasShadowed {
+		fmt.Fprintf(out, "\n* = shadowed by a higher-priority catalog\n")
+	}
+	return nil
 }
 
 func matchesKeyword(lowerKeyword string, packageName string, pd *catalog.PackageData) bool {
@@ -330,12 +388,24 @@ func runCatalogList(cmd *cobra.Command) error {
 		return nil
 	}
 
-	w := newTabWriter(cmd.OutOrStdout())
-	fmt.Fprintln(w, "NAME\tREF\tPRIORITY")
+	var rows [][]string
 	for _, cat := range catalogs {
-		fmt.Fprintf(w, "%s\t%s\t%d\n", cat.Name, cat.Ref, cat.Priority)
+		rows = append(rows, []string{cat.Name, cat.Ref, fmt.Sprintf("%d", cat.Priority)})
 	}
-	return w.Flush()
+	t := table.New().
+		Headers("NAME", "REF", "PRIORITY").
+		Rows(rows...).
+		BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderHeader(false).
+		BorderColumn(false).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			return lipgloss.NewStyle().PaddingRight(2)
+		})
+	fmt.Fprintln(cmd.OutOrStdout(), t.Render())
+	return nil
 }
 
 func newCatalogRemoveCmd() *cobra.Command {
@@ -814,16 +884,24 @@ func printResolveResults(out io.Writer, results []catalog.ResolveResult, format 
 		_, err = fmt.Fprintln(out, buf.String())
 		return err
 	case format == "":
-		w := newTabWriter(out)
-		fmt.Fprintln(w, "CATALOG\tVERSION\tIMAGE")
+		var rows [][]string
 		for _, r := range results {
-			fmt.Fprintf(w, "%s\t%s\t%s\n",
-				r.CatalogName,
-				r.VersionRelease,
-				r.Image,
-			)
+			rows = append(rows, []string{r.CatalogName, r.String(), r.Image})
 		}
-		return w.Flush()
+		t := table.New().
+			Headers("CATALOG", "VERSION", "IMAGE").
+			Rows(rows...).
+			BorderTop(false).
+			BorderBottom(false).
+			BorderLeft(false).
+			BorderRight(false).
+			BorderHeader(false).
+			BorderColumn(false).
+			StyleFunc(func(row, col int) lipgloss.Style {
+				return lipgloss.NewStyle().PaddingRight(2)
+			})
+		fmt.Fprintln(out, t.Render())
+		return nil
 	default:
 		return fmt.Errorf("unsupported output format %q: use json, yaml, or jsonpath=TEMPLATE", format)
 	}
