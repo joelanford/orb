@@ -2,6 +2,7 @@ package helm
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -404,6 +405,29 @@ func TestGenerateDeployments(t *testing.T) {
 	})
 }
 
+func TestGenerateDeployments_AnnotationValuesSurviveYAMLRoundTrip(t *testing.T) {
+	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+		b.CSV.Annotations = map[string]string{
+			"certified": "false",
+			"count":     "3",
+			"nullable":  "null",
+			"plain":     "hello",
+		}
+	})
+	data, err := generateDeployments(b, sets.New[string]())
+	require.NoError(t, err)
+	s := string(data)
+
+	// Boolean-like, numeric, and null-like values must be quoted so YAML
+	// does not coerce them away from strings.
+	assert.Contains(t, s, `certified: "false"`)
+	assert.Contains(t, s, `count: "3"`)
+	assert.Contains(t, s, `nullable: "null"`)
+
+	// Plain strings stay unquoted.
+	assert.Contains(t, s, "plain: hello")
+}
+
 func TestGenerateCRDs_Simple(t *testing.T) {
 	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
 		b.CRDs = []apiextensionsv1.CustomResourceDefinition{
@@ -776,6 +800,27 @@ func TestEscapeYAMLString(t *testing.T) {
 	t.Run("SpecialCharsQuoted", func(t *testing.T) {
 		result := escapeYAMLString("value: with colon")
 		assert.True(t, strings.HasPrefix(result, `"`), "should be quoted: %s", result)
+	})
+
+	t.Run("BooleanStringsQuoted", func(t *testing.T) {
+		for _, s := range []string{"true", "false", "True", "False", "TRUE", "FALSE", "yes", "no", "Yes", "No", "on", "off", "On", "Off"} {
+			result := escapeYAMLString(s)
+			assert.Equal(t, fmt.Sprintf("%q", s), result, "boolean-like %q should be quoted", s)
+		}
+	})
+
+	t.Run("NullStringsQuoted", func(t *testing.T) {
+		for _, s := range []string{"null", "Null", "NULL", "~"} {
+			result := escapeYAMLString(s)
+			assert.Equal(t, fmt.Sprintf("%q", s), result, "null-like %q should be quoted", s)
+		}
+	})
+
+	t.Run("NumericStringsQuoted", func(t *testing.T) {
+		for _, s := range []string{"0", "42", "3.14", "-1", "+1", ".5"} {
+			result := escapeYAMLString(s)
+			assert.Equal(t, fmt.Sprintf("%q", s), result, "numeric-like %q should be quoted", s)
+		}
 	})
 }
 

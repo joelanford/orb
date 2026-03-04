@@ -166,10 +166,26 @@ func writeYAMLFieldRaw(sb *strings.Builder, indent int, obj interface{}) {
 // scanning for problematic characters and quoting if necessary.
 func escapeYAMLString(s string) string {
 	s = escapeHelm(s)
-	if strings.ContainsAny(s, ":\n\"'{}[]|>&*!%#@`,?") || strings.HasPrefix(s, " ") || strings.HasSuffix(s, " ") {
+	if strings.ContainsAny(s, ":\n\"'{}[]|>&*!%#@`,?") || strings.HasPrefix(s, " ") || strings.HasSuffix(s, " ") || looksLikeYAMLNonString(s) {
 		return fmt.Sprintf("%q", s)
 	}
 	return s
+}
+
+// looksLikeYAMLNonString returns true when s would be interpreted by a YAML 1.1
+// parser as a boolean, null, or numeric value rather than a plain string.
+func looksLikeYAMLNonString(s string) bool {
+	switch strings.ToLower(s) {
+	case "true", "false", "yes", "no", "on", "off", "null", "~":
+		return true
+	}
+	if len(s) > 0 {
+		first := s[0]
+		if first == '.' || first == '+' || first == '-' || (first >= '0' && first <= '9') {
+			return true
+		}
+	}
+	return false
 }
 
 // certNameForDeployment returns the cert secret name for a given deployment name,
