@@ -17,6 +17,7 @@ func newRootCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newBundleCmd())
 	cmd.AddCommand(newCatalogCmd())
+	cmd.AddCommand(newHelmPluginCmd())
 	return cmd
 }
 

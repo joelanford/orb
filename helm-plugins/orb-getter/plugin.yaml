@@ -1,0 +1,14 @@
+apiVersion: v1
+name: orb-getter
+version: 0.1.0
+type: getter/v1
+runtime: subprocess
+config:
+  protocols:
+    - orb
+runtimeConfig:
+  protocolCommands:
+    - protocols:
+        - orb
+      platformCommand:
+        - command: get.sh

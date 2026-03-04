@@ -15,6 +15,11 @@ import (
 	"github.com/joelanford/orb/internal/convert"
 )
 
+// BundleNameAnnotation is the Chart.yaml annotation key that stores the
+// original CSV .metadata.name so the getter plugin can pass it back to
+// the catalog resolver as InstalledName.
+const BundleNameAnnotation = "orb.operatorframework.io/bundle-name"
+
 // Generate produces a Helm *chart.Chart from a registry+v1 bundle.
 func Generate(b *bundle.RegistryV1) (*chart.Chart, error) {
 	if err := convert.Converter.BundleValidator.Validate(b); err != nil {
@@ -43,6 +48,9 @@ func Generate(b *bundle.RegistryV1) (*chart.Chart, error) {
 		Version:     b.CSV.Spec.Version.String(),
 		Description: cmp.Or(b.CSV.Spec.Description, b.CSV.Spec.DisplayName, b.PackageName),
 		Type:        "application",
+		Annotations: map[string]string{
+			BundleNameAnnotation: b.CSV.Name,
+		},
 	}
 	if len(b.CSV.Spec.Icon) > 0 && b.CSV.Spec.Icon[0].Data != "" && b.CSV.Spec.Icon[0].MediaType != "" {
 		icon := b.CSV.Spec.Icon[0]
