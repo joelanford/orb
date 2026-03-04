@@ -16,11 +16,6 @@ type Destination interface {
 
 // Options holds authentication, TLS, and render settings for destination transports.
 type Options struct {
-	Username    string
-	Password    string
-	TLSVerify   bool
-	CertDir     string
-	NoCreds     bool
 	Namespace   string
 	ConvertOpts []convert.Option
 }
