@@ -1,12 +1,10 @@
 package image
 
 import (
-	"encoding/json"
 	"testing"
 
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"go.podman.io/image/v5/manifest"
 )
 
@@ -44,53 +42,6 @@ func TestIsManifest(t *testing.T) {
 			assert.Equal(t, tt.want, IsManifest(tt.mediaType))
 		})
 	}
-}
-
-func TestParseContent(t *testing.T) {
-	t.Run("ValidIndex", func(t *testing.T) {
-		idx := ocispecv1.Index{
-			MediaType: ocispecv1.MediaTypeImageIndex,
-			Manifests: []ocispecv1.Descriptor{
-				{MediaType: ocispecv1.MediaTypeImageManifest},
-			},
-		}
-		raw, err := json.Marshal(idx)
-		require.NoError(t, err)
-
-		desc := ocispecv1.Descriptor{MediaType: ocispecv1.MediaTypeImageIndex}
-		content, err := ParseContent(desc, raw)
-		require.NoError(t, err)
-		assert.NotNil(t, content.Index)
-		assert.Nil(t, content.Manifest)
-	})
-
-	t.Run("ValidManifest", func(t *testing.T) {
-		man := ocispecv1.Manifest{
-			MediaType: ocispecv1.MediaTypeImageManifest,
-			Config:    ocispecv1.Descriptor{MediaType: ocispecv1.MediaTypeImageConfig},
-		}
-		raw, err := json.Marshal(man)
-		require.NoError(t, err)
-
-		desc := ocispecv1.Descriptor{MediaType: ocispecv1.MediaTypeImageManifest}
-		content, err := ParseContent(desc, raw)
-		require.NoError(t, err)
-		assert.Nil(t, content.Index)
-		assert.NotNil(t, content.Manifest)
-	})
-
-	t.Run("UnknownMediaType", func(t *testing.T) {
-		desc := ocispecv1.Descriptor{MediaType: "application/unknown"}
-		_, err := ParseContent(desc, []byte(`{}`))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown media type")
-	})
-
-	t.Run("InvalidJSON", func(t *testing.T) {
-		desc := ocispecv1.Descriptor{MediaType: ocispecv1.MediaTypeImageIndex}
-		_, err := ParseContent(desc, []byte(`{invalid`))
-		require.Error(t, err)
-	})
 }
 
 func TestNewResolver(t *testing.T) {

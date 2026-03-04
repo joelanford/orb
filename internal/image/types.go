@@ -3,7 +3,6 @@ package image
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -181,42 +180,6 @@ func (cr *callbackReadCloser) Read(p []byte) (int, error) {
 
 func (cr *callbackReadCloser) Close() error {
 	return cr.rc.Close()
-}
-
-// ParseContent parses raw manifest bytes into a Content struct.
-func ParseContent(desc ocispecv1.Descriptor, raw []byte) (*Content, error) {
-	content := &Content{
-		Descriptor: desc,
-	}
-
-	switch {
-	case IsIndex(desc.MediaType):
-		var idx ocispecv1.Index
-		if err := json.Unmarshal(raw, &idx); err != nil {
-			return nil, err
-		}
-		content.Index = &idx
-
-	case IsManifest(desc.MediaType):
-		var man ocispecv1.Manifest
-		if err := json.Unmarshal(raw, &man); err != nil {
-			return nil, err
-		}
-		content.Manifest = &man
-
-	default:
-		return nil, fmt.Errorf("unknown media type: %s", desc.MediaType)
-	}
-
-	return content, nil
-}
-
-// Content holds parsed OCI content (either an index or a manifest).
-type Content struct {
-	ocispecv1.Descriptor
-
-	Index    *ocispecv1.Index
-	Manifest *ocispecv1.Manifest
 }
 
 // IsIndex returns true if the media type represents an OCI index or Docker manifest list.
