@@ -3,8 +3,11 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"helm.sh/helm/v4/pkg/action"
@@ -13,57 +16,168 @@ import (
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/release"
 
+	helmplugins "github.com/joelanford/orb/helm-plugins"
 	"github.com/joelanford/orb/internal/catalog"
 	"github.com/joelanford/orb/internal/helm"
 	"github.com/joelanford/orb/internal/source"
 	"github.com/joelanford/orb/internal/transport"
 )
 
+var pluginRunners = map[string]func(*cobra.Command, []string) error{
+	"orb-getter": runHelmPluginOrbGetterCmd,
+}
+
 func newHelmPluginCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "helm-plugin",
 		Short: "Helm getter plugin commands",
 	}
-	cmd.AddCommand(newHelmPluginOrbGetterCmd())
+	cmd.AddCommand(newHelmPluginInstallCmd())
+	cmd.AddCommand(newHelmPluginUninstallCmd())
+	cmd.AddCommand(newHelmPluginRunCmd())
 	return cmd
 }
 
-func newHelmPluginOrbGetterCmd() *cobra.Command {
+func newHelmPluginInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "orb-getter [CERTFILE KEYFILE CAFILE] URL",
-		Short: "Fetch a Helm chart from an orb-managed catalog",
-		Long: `Fetch a Helm chart from an orb-managed catalog using an orb:// URL.
+		Use:   "install",
+		Short: "Install a Helm plugin managed by orb",
+	}
+	for _, name := range pluginNames() {
+		name := name
+		cmd.AddCommand(&cobra.Command{
+			Use:   name,
+			Short: fmt.Sprintf("Install the %s Helm plugin", name),
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				pluginsDir := cli.New().PluginsDirectory
+				if err := installPlugin(pluginsDir, name); err != nil {
+					return fmt.Errorf("installing plugin %q: %w", name, err)
+				}
+				fmt.Fprintf(cmd.ErrOrStderr(), "Installed Helm plugin %q to %s\n", name, filepath.Join(pluginsDir, name))
+				return nil
+			},
+		})
+	}
+	return cmd
+}
 
-Parses the orb:// URL, detects any currently installed release for the package
-using the Helm SDK, resolves the best version from the catalog, converts the
-bundle to a Helm chart archive, and writes the .tgz contents to stdout.
+func newHelmPluginUninstallCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Uninstall a Helm plugin managed by orb",
+	}
+	for _, name := range pluginNames() {
+		name := name
+		cmd.AddCommand(&cobra.Command{
+			Use:   name,
+			Short: fmt.Sprintf("Uninstall the %s Helm plugin", name),
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				pluginsDir := cli.New().PluginsDirectory
+				dest := filepath.Join(pluginsDir, name)
+				if err := os.RemoveAll(dest); err != nil {
+					return fmt.Errorf("uninstalling plugin %q: %w", name, err)
+				}
+				fmt.Fprintf(cmd.ErrOrStderr(), "Uninstalled Helm plugin %q from %s\n", name, dest)
+				return nil
+			},
+		})
+	}
+	return cmd
+}
 
-When invoked by the Helm subprocess getter runtime, four positional arguments
-are passed: certFile, keyFile, caFile, and the URL. When invoked standalone
-for debugging, only the URL is required.
+func newHelmPluginRunCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "run <pluginName> [args...]",
+		Short: "Run an embedded Helm plugin",
+		Long: `Run an embedded Helm plugin by name.
 
-The URL format is orb://packageName/ (trailing slash required for Helm
-compatibility). Query parameters control resolution.
+This command is typically invoked by a plugin's get.sh script rather than
+called directly by users.
 
 Examples:
-  # Standalone usage
-  orb helm-plugin orb-getter "orb://vault/"
-  orb helm-plugin orb-getter "orb://vault/?version=^1.0"
-  orb helm-plugin orb-getter "orb://vault/?channel=stable"
-
-  # Helm usage (the plugin is invoked automatically)
-  helm install my-release "orb://vault/"
-  helm install my-release "orb://vault/?version=^1.0"
-  helm upgrade my-release "orb://vault/?version=^1.0"`,
-		Args: cobra.RangeArgs(1, 4),
+  orb helm-plugin run orb-getter "orb://vault/"
+  orb helm-plugin run orb-getter "orb://vault/?version=^1.0"`,
+		Args:               cobra.MinimumNArgs(1),
+		DisableFlagParsing: true,
+		SilenceUsage:       true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Helm subprocess getter passes: certFile keyFile caFile URL
-			// Standalone passes: URL
-			rawURL := args[len(args)-1]
-			return runHelmPluginOrbGetter(cmd, rawURL)
+			// Since flag parsing is disabled, handle --help manually.
+			for _, a := range args {
+				if a == "--help" || a == "-h" {
+					return cmd.Help()
+				}
+			}
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			pluginName := args[0]
+			runner, ok := pluginRunners[pluginName]
+			if !ok {
+				return fmt.Errorf("unknown plugin %q", pluginName)
+			}
+			return runner(cmd, args[1:])
 		},
 	}
 	return cmd
+}
+
+// pluginNames returns the names of all embedded plugin directories.
+func pluginNames() []string {
+	entries, err := fs.ReadDir(helmplugins.FS, ".")
+	if err != nil {
+		// Embedded FS read should never fail.
+		panic(fmt.Sprintf("reading embedded plugins: %v", err))
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	return names
+}
+
+// installPlugin copies the embedded plugin files into the Helm plugins directory.
+func installPlugin(pluginsDir, name string) error {
+	dest := filepath.Join(pluginsDir, name)
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return err
+	}
+
+	return fs.WalkDir(helmplugins.FS, name, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		target := filepath.Join(pluginsDir, path)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+
+		data, err := fs.ReadFile(helmplugins.FS, path)
+		if err != nil {
+			return err
+		}
+
+		perm := os.FileMode(0o644)
+		if strings.HasSuffix(path, ".sh") {
+			perm = 0o755
+		}
+
+		return os.WriteFile(target, data, perm)
+	})
+}
+
+func runHelmPluginOrbGetterCmd(cmd *cobra.Command, args []string) error {
+	if len(args) < 1 || len(args) > 4 {
+		return fmt.Errorf("expected 1 to 4 arguments, got %d", len(args))
+	}
+	// Helm subprocess getter passes: certFile keyFile caFile URL
+	// Standalone passes: URL
+	rawURL := args[len(args)-1]
+	return runHelmPluginOrbGetter(cmd, rawURL)
 }
 
 // orbURL holds the parsed components of an orb:// URL.

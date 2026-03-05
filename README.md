@@ -132,6 +132,53 @@ helm template my-release /tmp/chart --namespace operators \
   --set deploymentConfig.resources.limits.memory=8Gi
 ```
 
+### Helm plugins
+
+`orb` ships with built-in Helm plugins that integrate with the Helm CLI. Use
+`orb helm-plugin install` and `orb helm-plugin uninstall` to manage them.
+
+```sh
+# Install a plugin
+orb helm-plugin install orb-getter
+
+# Uninstall a plugin
+orb helm-plugin uninstall orb-getter
+```
+
+#### orb-getter
+
+The `orb-getter` plugin registers a Helm getter for the `orb://` protocol,
+enabling `helm install`, `helm upgrade`, and `helm template` to resolve and
+fetch charts directly from orb-managed catalogs.
+
+```sh
+# Install the plugin
+orb helm-plugin install orb-getter
+
+# Use it via Helm
+helm install my-release "orb://vault/"
+helm install my-release "orb://vault/?version=^1.0"
+helm install my-release "orb://vault/?channel=stable"
+helm upgrade my-release "orb://vault/?version=^1.0"
+
+# Or invoke it directly for debugging
+orb helm-plugin run orb-getter "orb://vault/"
+```
+
+The `orb://` URL format is `orb://<packageName>/[?<query-parameters>]`. Supported
+query parameters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `version` | Semver version constraint (e.g. `^1.0`, `>=0.4.0, <1.0.0`) |
+| `channel` | Channel name filter (repeatable) |
+| `catalog-label-selector` | Kubernetes label selector to filter catalogs |
+| `release` | Release name for disambiguation when multiple releases share a package name |
+
+When a matching release is already installed in the cluster, the plugin detects
+it via the Helm SDK and uses it as an upgrade constraint so that only valid
+upgrade candidates are resolved.
+
 ### Supported transports
 
 Sources and destinations use skopeo-style transport prefixes.
