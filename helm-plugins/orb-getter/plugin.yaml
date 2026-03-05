@@ -11,4 +11,4 @@ runtimeConfig:
     - protocols:
         - orb
       platformCommand:
-        - command: get.sh
+        - command: run.sh
