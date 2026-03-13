@@ -56,6 +56,20 @@ func generateSchema(b *bundle.RegistryV1, supportedModes sets.Set[v1alpha1.Insta
 	return append(data, '\n'), nil
 }
 
+const (
+	namespaceNamePattern   = "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+	namespaceNameMaxLength = 63
+)
+
+func namespaceStringSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":      "string",
+		"minLength": 1,
+		"maxLength": namespaceNameMaxLength,
+		"pattern":   namespaceNamePattern,
+	}
+}
+
 func buildWatchNamespaceSchema(supportedModes sets.Set[v1alpha1.InstallModeType]) map[string]interface{} {
 	supportsAllNS := supportedModes.Has(v1alpha1.InstallModeTypeAllNamespaces)
 	supportsNonAllNS := supportedModes.Has(v1alpha1.InstallModeTypeSingleNamespace) ||
@@ -63,21 +77,21 @@ func buildWatchNamespaceSchema(supportedModes sets.Set[v1alpha1.InstallModeType]
 
 	switch {
 	case supportsAllNS && !supportsNonAllNS:
-		// Only AllNamespaces
+		// Only AllNamespaces — value must be empty string
 		return map[string]interface{}{
 			"type":  "string",
 			"const": "",
 		}
 	case !supportsAllNS && supportsNonAllNS:
-		// Only non-AllNamespaces (required, must be non-empty)
-		return map[string]interface{}{
-			"type":      "string",
-			"minLength": 1,
-		}
+		// Only non-AllNamespaces — required, must be a valid namespace name
+		return namespaceStringSchema()
 	default:
-		// Both supported or neither (no constraint)
+		// Both supported — optional, null or valid namespace name
 		return map[string]interface{}{
-			"type": "string",
+			"anyOf": []interface{}{
+				map[string]interface{}{"type": "null"},
+				namespaceStringSchema(),
+			},
 		}
 	}
 }

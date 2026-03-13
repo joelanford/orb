@@ -17,19 +17,18 @@ import (
 func generateDeployments(b *bundle.RegistryV1, webhookDeployments sets.Set[string]) ([]byte, error) {
 	var sb strings.Builder
 
+	sb.WriteString("{{- include \"validateWatchNamespace\" . -}}\n")
 	for _, depSpec := range b.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs {
 		sb.WriteString("---\n")
 
 		isWebhookDep := webhookDeployments.Has(depSpec.Name)
-		if err := writeDeployment(&sb, b, depSpec, isWebhookDep); err != nil {
-			return nil, err
-		}
+		writeDeployment(&sb, b, depSpec, isWebhookDep)
 	}
 
 	return []byte(sb.String()), nil
 }
 
-func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1.StrategyDeploymentSpec, isWebhookDep bool) error {
+func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1.StrategyDeploymentSpec, isWebhookDep bool) {
 	certName := certNameForDeployment(depSpec.Name)
 
 	// --- metadata ---
@@ -139,7 +138,6 @@ func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1
 		}
 	}
 
-	return nil
 }
 
 func writeNodeSelector(sb *strings.Builder, base map[string]string) {
@@ -185,7 +183,7 @@ func writeAffinitySubField(sb *strings.Builder, field string, baseValue interfac
 		hasBase = v != nil
 	}
 
-	fmt.Fprintf(sb, "        {{- if %s }}\n", configPath)
+	fmt.Fprintf(sb, "        {{- if and .Values.deploymentConfig.affinity %s }}\n", configPath)
 	fmt.Fprintf(sb, "        %s: {{- toYaml %s | nindent 10 }}\n", field, configPath)
 	if hasBase {
 		sb.WriteString("        {{- else }}\n")
@@ -198,7 +196,7 @@ func writeTolerations(sb *strings.Builder, base []corev1.Toleration) {
 	if len(base) > 0 {
 		writeYAMLField(sb, "tolerations", 6, base)
 		sb.WriteString("      {{- with .Values.deploymentConfig.tolerations }}\n")
-		sb.WriteString("      {{- toYaml . | nindent 6 }}\n")
+		sb.WriteString("      {{- toYaml . | nindent 8 }}\n")
 		sb.WriteString("      {{- end }}\n")
 	} else {
 		sb.WriteString("      {{- with .Values.deploymentConfig.tolerations }}\n")
@@ -314,7 +312,7 @@ func writeContainerEnvFrom(sb *strings.Builder, baseEnvFrom []corev1.EnvFromSour
 	if len(baseEnvFrom) > 0 {
 		writeYAMLField(sb, "envFrom", 8, baseEnvFrom)
 		sb.WriteString("        {{- with .Values.deploymentConfig.envFrom }}\n")
-		sb.WriteString("        {{- toYaml . | nindent 8 }}\n")
+		sb.WriteString("        {{- toYaml . | nindent 10 }}\n")
 		sb.WriteString("        {{- end }}\n")
 	} else {
 		sb.WriteString("        {{- with .Values.deploymentConfig.envFrom }}\n")
@@ -348,8 +346,8 @@ func writeContainerVolumeMounts(sb *strings.Builder, baseMounts []corev1.VolumeM
 			sb.WriteString("        volumeMounts:\n")
 		}
 		for _, cfg := range certVolumeConfigList {
-			fmt.Fprintf(sb, "        - name: %s\n", cfg.Name)
-			fmt.Fprintf(sb, "          mountPath: %s\n", cfg.Path)
+			fmt.Fprintf(sb, "          - name: %s\n", cfg.Name)
+			fmt.Fprintf(sb, "            mountPath: %s\n", cfg.Path)
 		}
 		sb.WriteString("        {{- end }}\n")
 	}
@@ -359,6 +357,6 @@ func writeContainerVolumeMounts(sb *strings.Builder, baseMounts []corev1.VolumeM
 	if !hasBase && !isWebhookDep {
 		sb.WriteString("        volumeMounts:\n")
 	}
-	sb.WriteString("        {{- toYaml . | nindent 8 }}\n")
+	sb.WriteString("        {{- toYaml . | nindent 10 }}\n")
 	sb.WriteString("        {{- end }}\n")
 }

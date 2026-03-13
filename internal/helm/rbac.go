@@ -21,10 +21,7 @@ func generateRBAC(b *bundle.RegistryV1) ([]byte, error) {
 
 		sb.WriteString("---\n")
 
-		rulesYAML, err := renderRules(perm.Rules, 0)
-		if err != nil {
-			return nil, fmt.Errorf("rendering clusterPermission rules: %w", err)
-		}
+		rulesYAML := renderRules(perm.Rules)
 
 		fmt.Fprintf(&sb, `apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -73,10 +70,7 @@ subjects:
 				sb.WriteString("---\n")
 			}
 
-			rulesYAML, err := renderRules(allNSPerm.Rules, 0)
-			if err != nil {
-				return nil, fmt.Errorf("rendering permission rules: %w", err)
-			}
+			rulesYAML := renderRules(allNSPerm.Rules)
 
 			fmt.Fprintf(&sb, `apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -112,10 +106,7 @@ subjects:
 				sb.WriteString("---\n")
 			}
 
-			rulesYAML, err := renderRules(perm.Rules, 0)
-			if err != nil {
-				return nil, fmt.Errorf("rendering permission rules: %w", err)
-			}
+			rulesYAML := renderRules(perm.Rules)
 
 			fmt.Fprintf(&sb, `apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -150,22 +141,10 @@ subjects:
 }
 
 // renderRules marshals RBAC rules to indented YAML lines.
-func renderRules(rules []rbacv1.PolicyRule, indent int) (string, error) {
-	data, err := yaml.Marshal(rules)
-	if err != nil {
-		return "", err
-	}
+// renderRules marshals RBAC PolicyRules to YAML. Marshal will not error
+// on []rbacv1.PolicyRule since it contains only primitive fields.
+func renderRules(rules []rbacv1.PolicyRule) string {
+	data, _ := yaml.Marshal(rules)
 	s := strings.TrimRight(string(data), "\n")
-	s = escapeHelm(s)
-	if indent > 0 {
-		prefix := strings.Repeat(" ", indent)
-		lines := strings.Split(s, "\n")
-		for i, line := range lines {
-			if line != "" {
-				lines[i] = prefix + line
-			}
-		}
-		s = strings.Join(lines, "\n")
-	}
-	return s, nil
+	return escapeHelm(s)
 }
