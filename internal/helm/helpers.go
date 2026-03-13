@@ -1,7 +1,16 @@
 package helm
 
-func generateHelpers() []byte {
-	return []byte(`{{/*
+import (
+	"strings"
+
+	"github.com/operator-framework/api/pkg/operators/v1alpha1"
+	"k8s.io/apimachinery/pkg/util/sets"
+)
+
+func generateHelpers(supportedModes sets.Set[v1alpha1.InstallModeType]) []byte {
+	var sb strings.Builder
+
+	sb.WriteString(`{{/*
 Compute olm.targetNamespaces annotation value.
 If watchNamespace is empty (AllNamespaces), the value is empty string.
 Otherwise, it is set to the watchNamespace value.
@@ -50,4 +59,44 @@ Usage: {{ include "mergeEnv" (dict "base" $baseJSON "overrides" .Values.deployme
 {{- toYaml $result -}}
 {{- end -}}
 `)
+
+	hasAllNS := supportedModes.Has(v1alpha1.InstallModeTypeAllNamespaces)
+	hasOwn := supportedModes.Has(v1alpha1.InstallModeTypeOwnNamespace)
+	hasSingle := supportedModes.Has(v1alpha1.InstallModeTypeSingleNamespace)
+
+	switch {
+	case !hasAllNS && hasOwn && !hasSingle:
+		sb.WriteString(`
+{{/*
+Validate watchNamespace for OwnNamespace install mode.
+The operator only supports OwnNamespace mode, so watchNamespace
+must equal the release namespace.
+*/}}
+{{- define "validateWatchNamespace" -}}
+{{- if and .Values.watchNamespace (ne .Values.watchNamespace .Release.Namespace) -}}
+{{- fail "watchNamespace must equal the release namespace (operator only supports OwnNamespace install mode)" -}}
+{{- end -}}
+{{- end -}}
+`)
+	case !hasAllNS && hasSingle && !hasOwn:
+		sb.WriteString(`
+{{/*
+Validate watchNamespace for SingleNamespace install mode.
+The operator only supports SingleNamespace mode, so watchNamespace
+must differ from the release namespace.
+*/}}
+{{- define "validateWatchNamespace" -}}
+{{- if and .Values.watchNamespace (eq .Values.watchNamespace .Release.Namespace) -}}
+{{- fail "watchNamespace must differ from the release namespace (operator only supports SingleNamespace install mode)" -}}
+{{- end -}}
+{{- end -}}
+`)
+	default:
+		sb.WriteString(`
+{{- define "validateWatchNamespace" -}}
+{{- end -}}
+`)
+	}
+
+	return []byte(sb.String())
 }

@@ -72,7 +72,7 @@ func Generate(b *bundle.RegistryV1) (*chart.Chart, error) {
 	// Templates
 	templates := []*common.File{{
 		Name: "templates/_helpers.tpl",
-		Data: generateHelpers(),
+		Data: generateHelpers(supportedInstallModes),
 	}}
 
 	type templateGen struct {
