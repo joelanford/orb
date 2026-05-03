@@ -14,7 +14,7 @@ Key packages:
 - `internal/destination/` — output targets (plain manifests, Helm charts)
 - `internal/helm/` — Helm chart generation and packaging
 - `internal/source/` — registry+v1 bundle source loading
-- `internal/image/` — OCI image handling
+- `internal/progress/` — download progress tracking (wraps library-olm image.Repository)
 - `internal/transport/` — transport prefix parsing (docker://, oci:, dir:, etc.)
 
 ## Design Principles

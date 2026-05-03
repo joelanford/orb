@@ -92,7 +92,7 @@ func (p CertManagerCertificateProvider) AdditionalObjects(cfg convert.Certificat
 				fmt.Sprintf("%s.%s.svc", cfg.ServiceName, cfg.Namespace),
 				fmt.Sprintf("%s.%s.svc.cluster.local", cfg.ServiceName, cfg.Namespace),
 			},
-			IssuerRef: certmanagermetav1.ObjectReference{
+			IssuerRef: certmanagermetav1.IssuerReference{
 				Name: issuer.GetName(),
 			},
 			Duration: &metav1.Duration{
