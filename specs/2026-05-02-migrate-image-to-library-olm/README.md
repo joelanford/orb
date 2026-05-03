@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 ---
 # Migrate image layer to library-olm
 

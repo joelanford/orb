@@ -22,11 +22,14 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 	"sigs.k8s.io/yaml"
 
+	"github.com/joelanford/library-olm/image"
+	imagecatalog "github.com/joelanford/library-olm/image/catalog"
+	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/term"
 
 	"github.com/joelanford/orb/internal/catalog"
-	"github.com/joelanford/orb/internal/image"
+	orbimage "github.com/joelanford/orb/internal/image"
 	"github.com/joelanford/orb/internal/termimage"
 	"github.com/joelanford/orb/internal/transport"
 )
@@ -494,21 +497,25 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return fmt.Errorf("catalog %q already exists", name)
 	}
 
-	repo, err := newDockerCachingRepo(ctx, tRef.Ref)
+	repo, err := newDockerRepo(ctx, tRef.Ref)
 	if err != nil {
 		return err
 	}
 	defer repo.Close()
 
-	resolver := image.NewResolver()
-	resolver.Register(&image.FBCHandler{})
-
-	total, err := resolver.TotalSize(ctx, repo)
+	handler := &imagecatalog.FBCHandler{}
+	desc, manifestBytes, err := orbimage.ResolveAndMatch(ctx, repo, handler)
 	if err != nil {
-		return fmt.Errorf("computing total size: %w", err)
+		return err
 	}
 
-	// Progress bar for download feedback.
+	discoveredDescs, err := handler.Discover(ctx, repo, desc, manifestBytes)
+	if err != nil {
+		return fmt.Errorf("discovering image content: %w", err)
+	}
+	total := sumDescriptorSizes(discoveredDescs)
+	alreadyFetched := sumDescriptorSizes(repo.CachedDescriptors())
+
 	p := mpb.New(mpb.WithOutput(cmd.ErrOrStderr()))
 	bar := p.AddBar(0,
 		mpb.PrependDecorators(
@@ -517,16 +524,8 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		),
 	)
 	bar.SetTotal(total, false)
-
-	// Set callback AFTER TotalSize so config blob doesn't count toward progress.
-	repo.SetOnBytesRead(func(n int) { bar.IncrBy(n) })
-
-	desc, err := repo.Resolve(ctx)
-	if err != nil {
-		bar.Abort(true)
-		p.Wait()
-		return fmt.Errorf("resolving image: %w", err)
-	}
+	bar.IncrBy(int(alreadyFetched))
+	repo.SetOnRead(func(n int) { bar.IncrBy(n) })
 
 	tmpDir, err := os.MkdirTemp("", "orb-catalog-*")
 	if err != nil {
@@ -536,7 +535,7 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if err := resolver.Unpack(ctx, repo, tmpDir); err != nil {
+	if err := handler.Unpack(ctx, repo, desc, manifestBytes, tmpDir); err != nil {
 		bar.Abort(true)
 		p.Wait()
 		return fmt.Errorf("unpacking catalog: %w", err)
@@ -614,11 +613,11 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 
 	// ── Phase 1: Resolve refs and check freshness ──────────────────────
 	type resolvedCatalog struct {
-		name        string
-		newDigest   digest.Digest
-		upToDate    bool
-		cachingRepo *image.CachingRepository
-		err         error
+		name      string
+		newDigest digest.Digest
+		upToDate  bool
+		repo      *orbimage.Repository
+		err       error
 	}
 
 	resolved := make([]resolvedCatalog, len(toUpdate))
@@ -636,15 +635,15 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 				return nil
 			}
 
-			cachingRepo, err := newDockerCachingRepo(resolveCtx, tRef.Ref)
+			repo, err := newDockerRepo(resolveCtx, tRef.Ref)
 			if err != nil {
 				res.err = fmt.Errorf("catalog %q: %w", cat.Name, err)
 				return nil
 			}
 
-			desc, err := cachingRepo.Resolve(resolveCtx)
+			desc, err := repo.Resolve(resolveCtx)
 			if err != nil {
-				cachingRepo.Close()
+				repo.Close()
 				res.err = fmt.Errorf("catalog %q: resolving image: %w", cat.Name, err)
 				return nil
 			}
@@ -653,19 +652,18 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 
 			if !opts.force && desc.Digest.String() == cat.Digest {
 				res.upToDate = true
-				cachingRepo.Close()
+				repo.Close()
 				return nil
 			}
 
-			// Keep cachingRepo open for phase 2.
-			res.cachingRepo = cachingRepo
+			res.repo = repo
 			return nil
 		})
 	}
 	if err := resolveGroup.Wait(); err != nil {
 		for i := range resolved {
-			if resolved[i].cachingRepo != nil {
-				resolved[i].cachingRepo.Close()
+			if resolved[i].repo != nil {
+				resolved[i].repo.Close()
 			}
 		}
 		return err
@@ -700,20 +698,27 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 		unpackGroup.Go(func() error {
 			res := &resolved[t.idx]
 			bar := t.bar
-			defer res.cachingRepo.Close()
+			defer res.repo.Close()
 
-			resolver := image.NewResolver()
-			resolver.Register(&image.FBCHandler{})
-
-			total, err := resolver.TotalSize(unpackCtx, res.cachingRepo)
+			handler := &imagecatalog.FBCHandler{}
+			desc, manifestBytes, err := orbimage.ResolveAndMatch(unpackCtx, res.repo, handler)
 			if err != nil {
-				res.err = fmt.Errorf("catalog %q: computing total size: %w", res.name, err)
+				res.err = fmt.Errorf("catalog %q: %w", res.name, err)
 				bar.Abort(true)
 				return nil
 			}
-			bar.SetTotal(total, false)
 
-			res.cachingRepo.SetOnBytesRead(func(n int) { bar.IncrBy(n) })
+			discoveredDescs, err := handler.Discover(unpackCtx, res.repo, desc, manifestBytes)
+			if err != nil {
+				res.err = fmt.Errorf("catalog %q: discovering image content: %w", res.name, err)
+				bar.Abort(true)
+				return nil
+			}
+			total := sumDescriptorSizes(discoveredDescs)
+			alreadyFetched := sumDescriptorSizes(res.repo.CachedDescriptors())
+			bar.SetTotal(total, false)
+			bar.IncrBy(int(alreadyFetched))
+			res.repo.SetOnRead(func(n int) { bar.IncrBy(n) })
 
 			tmpDir, err := os.MkdirTemp("", "orb-catalog-*")
 			if err != nil {
@@ -723,7 +728,7 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 			}
 			defer os.RemoveAll(tmpDir)
 
-			if err := resolver.Unpack(unpackCtx, res.cachingRepo, tmpDir); err != nil {
+			if err := handler.Unpack(unpackCtx, res.repo, desc, manifestBytes, tmpDir); err != nil {
 				res.err = fmt.Errorf("catalog %q: unpacking catalog: %w", res.name, err)
 				bar.Abort(true)
 				return nil
@@ -930,23 +935,29 @@ func printResolveResults(out io.Writer, results []catalog.ResolveResult, format 
 	}
 }
 
-func newDockerCachingRepo(ctx context.Context, ref string) (*image.CachingRepository, error) {
+func newDockerRepo(ctx context.Context, ref string) (*orbimage.Repository, error) {
 	imgRef, err := dockerTransport.ParseReference("//" + ref)
 	if err != nil {
 		return nil, fmt.Errorf("parsing docker reference: %w", err)
 	}
 
-	sysCtx := &types.SystemContext{}
-
-	client, err := image.NewContainersImageClient(ctx, imgRef, sysCtx)
+	client, err := image.NewContainersImageRepository(ctx, imgRef, &types.SystemContext{})
 	if err != nil {
-		return nil, fmt.Errorf("creating image client: %w", err)
+		return nil, fmt.Errorf("creating image repository: %w", err)
 	}
 
-	repo, err := image.NewCachingRepository(client)
+	repo, err := orbimage.NewRepository(client)
 	if err != nil {
 		client.Close()
-		return nil, fmt.Errorf("creating caching repository: %w", err)
+		return nil, err
 	}
 	return repo, nil
+}
+
+func sumDescriptorSizes(descs []ocispecv1.Descriptor) int64 {
+	var total int64
+	for _, d := range descs {
+		total += d.Size
+	}
+	return total
 }

@@ -17,8 +17,11 @@ import (
 	archiveTransport "go.podman.io/image/v5/oci/archive"
 	layoutTransport "go.podman.io/image/v5/oci/layout"
 
+	"github.com/joelanford/library-olm/image"
+	imagebundle "github.com/joelanford/library-olm/image/bundle"
+
 	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/image"
+	orbimage "github.com/joelanford/orb/internal/image"
 	"github.com/joelanford/orb/internal/transport"
 )
 
@@ -164,11 +167,10 @@ func untar(r io.Reader, dest string) error {
 	return nil
 }
 
-// readFromImage extracts a registry+v1 bundle from an OCI image using the imagev2 stack.
 func readFromImage(ctx context.Context, imgRef types.ImageReference, sysCtx *types.SystemContext) (*bundle.RegistryV1, error) {
-	client, err := image.NewContainersImageClient(ctx, imgRef, sysCtx)
+	client, err := image.NewContainersImageRepository(ctx, imgRef, sysCtx)
 	if err != nil {
-		return nil, fmt.Errorf("creating image client: %w", err)
+		return nil, fmt.Errorf("creating image repository: %w", err)
 	}
 
 	repo, err := image.NewCachingRepository(client)
@@ -178,16 +180,19 @@ func readFromImage(ctx context.Context, imgRef types.ImageReference, sysCtx *typ
 	}
 	defer repo.Close()
 
+	handler := &imagebundle.RegistryV1Handler{}
+	desc, manifestBytes, err := orbimage.ResolveAndMatch(ctx, repo, handler)
+	if err != nil {
+		return nil, err
+	}
+
 	tmpDir, err := os.MkdirTemp("", "orb-bundle-")
 	if err != nil {
 		return nil, fmt.Errorf("creating temp directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	resolver := image.NewResolver()
-	resolver.Register(&image.RegistryV1Handler{})
-
-	if err := resolver.Unpack(ctx, repo, tmpDir); err != nil {
+	if err := handler.Unpack(ctx, repo, desc, manifestBytes, tmpDir); err != nil {
 		return nil, fmt.Errorf("unpacking image: %w", err)
 	}
 
