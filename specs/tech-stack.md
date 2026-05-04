@@ -28,8 +28,7 @@
 | Tool | Purpose |
 |---|---|
 | testify | Test assertions and helpers |
-| golangci-lint | Linting (errorlint, gocritic, misspell, unconvert, revive) |
-| govulncheck | Vulnerability scanning |
+| golangci-lint | Linting (errcheck, errorlint, gocritic, importas, ineffassign, misspell, staticcheck, unconvert, unused); formatting (gci, gofmt) |
 | goreleaser v2 | Cross-platform builds, container images, and releases |
 
 ## Project Structure
@@ -63,8 +62,8 @@ specs/                   # Governing specs and work item specs
 | `make install` | Install to GOPATH (`go install ./cmd/orb`) |
 | `make test` | Run tests with race detector (`go test ./... -race -count=1`) |
 | `make lint` | Run golangci-lint (`go tool golangci-lint run`) |
-| `make vulncheck` | Run vulnerability check (`go tool govulncheck ./...`) |
-| `make verify` | Format, vet, tidy, and check for uncommitted changes |
+| `make lint-fix` | Run golangci-lint with auto-fix (`go tool golangci-lint run --fix`) |
+| `make verify` | Run tidy and lint-fix, then check for uncommitted changes |
 | `make release` | Build release artifacts via goreleaser |
 
 ## Containerization
@@ -75,3 +74,4 @@ specs/                   # Governing specs and work item specs
 ## CI/CD
 
 - **GitHub Actions:** `ci.yml` (test/lint/verify on PRs) and `release.yml` (goreleaser on tags)
+- **Dependabot:** automated dependency updates for Go modules, GitHub Actions, and Docker

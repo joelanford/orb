@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-
-	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 
 	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/convert"

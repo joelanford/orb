@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/operator-framework/api/pkg/operators/v1alpha1"
+	registrybundle "github.com/operator-framework/operator-registry/pkg/lib/bundle"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,9 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/operator-framework/api/pkg/operators/v1alpha1"
-	registrybundle "github.com/operator-framework/operator-registry/pkg/lib/bundle"
 
 	"github.com/joelanford/orb/internal/bundle"
 )

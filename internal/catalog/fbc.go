@@ -8,9 +8,10 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/operator-framework/operator-registry/alpha/declcfg"
 	"github.com/operator-framework/operator-registry/alpha/property"
+
+	"github.com/joelanford/orb/internal/bundle"
 )
 
 // PackageData holds pre-processed resolve data for a single package.

@@ -31,8 +31,8 @@ Key packages:
 make build       # go build -o orb ./cmd/orb
 make test        # go test ./... -race -count=1
 make lint        # go tool golangci-lint run
-make verify      # go mod tidy + gofmt -s + go vet + hack/diff.sh
-make vulncheck   # go tool govulncheck ./...
+make lint-fix    # go tool golangci-lint run --fix
+make verify      # hack/diff.sh tidy lint-fix (runs targets, checks for changes)
 make release     # goreleaser (snapshot by default)
 ```
 

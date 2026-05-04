@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"strings"
 	"testing"
-
-	"image/jpeg"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

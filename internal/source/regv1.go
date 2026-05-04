@@ -10,15 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"go.podman.io/image/v5/pkg/compression"
-	"go.podman.io/image/v5/types"
-
+	"github.com/joelanford/library-olm/image"
+	imagebundle "github.com/joelanford/library-olm/image/bundle"
 	dockerTransport "go.podman.io/image/v5/docker"
 	archiveTransport "go.podman.io/image/v5/oci/archive"
 	layoutTransport "go.podman.io/image/v5/oci/layout"
-
-	"github.com/joelanford/library-olm/image"
-	imagebundle "github.com/joelanford/library-olm/image/bundle"
+	"go.podman.io/image/v5/pkg/compression"
+	"go.podman.io/image/v5/types"
 
 	"github.com/joelanford/orb/internal/bundle"
 	orbimage "github.com/joelanford/orb/internal/image"
