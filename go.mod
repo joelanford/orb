@@ -6,7 +6,6 @@ require (
 	charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251120230642-dcccabe2cd63
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/blang/semver/v4 v4.0.0
-	github.com/cert-manager/cert-manager v1.20.0
 	github.com/go-logr/logr v1.4.3
 	github.com/joelanford/library-olm v0.0.0-20260504224520-625e9a55cf13
 	github.com/muesli/termenv v0.16.0
@@ -29,7 +28,6 @@ require (
 	k8s.io/apimachinery v0.35.2
 	k8s.io/client-go v0.35.2
 	k8s.io/klog/v2 v2.140.0
-	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
 	modernc.org/sqlite v1.50.0
 	sigs.k8s.io/controller-runtime v0.23.1
 	sigs.k8s.io/yaml v1.6.0
@@ -168,6 +166,7 @@ require (
 	github.com/ccojocar/zxcvbn-go v1.0.4 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
+	github.com/cert-manager/cert-manager v1.20.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/charithe/durationcheck v0.0.11 // indirect
@@ -599,6 +598,7 @@ require (
 	k8s.io/component-base v0.35.2 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/kubectl v0.35.1 // indirect
+	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
