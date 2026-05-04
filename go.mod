@@ -8,7 +8,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cert-manager/cert-manager v1.20.0
 	github.com/go-logr/logr v1.4.3
-	github.com/joelanford/library-olm v0.0.0-20260503230020-9eefcd929570
+	github.com/joelanford/library-olm v0.0.0-20260504224520-625e9a55cf13
 	github.com/muesli/termenv v0.16.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
