@@ -1,5 +1,6 @@
 ---
-status: in-progress
+status: done
+pr: https://github.com/joelanford/orb/pull/28
 ---
 # Update CI and linting
 
