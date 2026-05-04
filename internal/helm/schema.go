@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"k8s.io/apimachinery/pkg/util/sets"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
-func generateSchema(b *bundle.RegistryV1, supportedModes sets.Set[v1alpha1.InstallModeType], hasWebhooks bool) ([]byte, error) {
+func generateSchema(b *registryv1.Bundle, supportedModes sets.Set[v1alpha1.InstallModeType], hasWebhooks bool) ([]byte, error) {
 	_ = b // b is available for future use; modes are pre-computed
 
 	watchNSSchema := buildWatchNamespaceSchema(supportedModes)

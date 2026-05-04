@@ -7,11 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/convert"
 	"github.com/joelanford/orb/internal/transport"
 )
 
@@ -20,13 +19,13 @@ type plainDir struct {
 	opts Options
 }
 
-func (d *plainDir) Write(_ context.Context, b *bundle.RegistryV1) error {
+func (d *plainDir) Write(_ context.Context, b *registryv1.Bundle) error {
 	dir := transport.ExpandPath(d.ref)
 	if _, err := os.Stat(dir); err == nil {
 		return fmt.Errorf("destination directory already exists: %s", dir)
 	}
 
-	objs, err := convert.Converter.Convert(*b, d.opts.Namespace, d.opts.ConvertOpts...)
+	objs, err := registryv1.ToPlainManifests(*b, d.opts.Namespace, d.opts.ConvertOpts...)
 	if err != nil {
 		return err
 	}
@@ -48,8 +47,8 @@ type plainStdout struct {
 	opts Options
 }
 
-func (d *plainStdout) Write(_ context.Context, b *bundle.RegistryV1) error {
-	objs, err := convert.Converter.Convert(*b, d.opts.Namespace, d.opts.ConvertOpts...)
+func (d *plainStdout) Write(_ context.Context, b *registryv1.Bundle) error {
+	objs, err := registryv1.ToPlainManifests(*b, d.opts.Namespace, d.opts.ConvertOpts...)
 	if err != nil {
 		return err
 	}

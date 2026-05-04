@@ -8,15 +8,14 @@ import (
 	"slices"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 // CheckDeploymentSpecUniqueness checks that each strategy deployment spec in the csv has a unique name.
-func CheckDeploymentSpecUniqueness(rv1 *bundle.RegistryV1) []error {
+func CheckDeploymentSpecUniqueness(rv1 *registryv1.Bundle) []error {
 	deploymentNameSet := sets.Set[string]{}
 	duplicateDeploymentNames := sets.Set[string]{}
 	for _, dep := range rv1.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs {
@@ -35,7 +34,7 @@ func CheckDeploymentSpecUniqueness(rv1 *bundle.RegistryV1) []error {
 
 // CheckDeploymentNameIsDNS1123SubDomain checks each deployment strategy spec name complies with Kubernetes
 // resource naming conventions
-func CheckDeploymentNameIsDNS1123SubDomain(rv1 *bundle.RegistryV1) []error {
+func CheckDeploymentNameIsDNS1123SubDomain(rv1 *registryv1.Bundle) []error {
 	deploymentNameErrMap := map[string][]string{}
 	for _, dep := range rv1.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs {
 		errs := validation.IsDNS1123Subdomain(dep.Name)
@@ -53,7 +52,7 @@ func CheckDeploymentNameIsDNS1123SubDomain(rv1 *bundle.RegistryV1) []error {
 }
 
 // CheckOwnedCRDExistence checks bundle owned custom resource definitions declared in the csv exist in the bundle
-func CheckOwnedCRDExistence(rv1 *bundle.RegistryV1) []error {
+func CheckOwnedCRDExistence(rv1 *registryv1.Bundle) []error {
 	crdsNames := sets.Set[string]{}
 	for _, crd := range rv1.CRDs {
 		crdsNames.Insert(crd.Name)
@@ -74,7 +73,7 @@ func CheckOwnedCRDExistence(rv1 *bundle.RegistryV1) []error {
 }
 
 // CheckCRDResourceUniqueness checks that the bundle CRD names are unique
-func CheckCRDResourceUniqueness(rv1 *bundle.RegistryV1) []error {
+func CheckCRDResourceUniqueness(rv1 *registryv1.Bundle) []error {
 	crdsNames := sets.Set[string]{}
 	duplicateCRDNames := sets.Set[string]{}
 	for _, crd := range rv1.CRDs {
@@ -92,7 +91,7 @@ func CheckCRDResourceUniqueness(rv1 *bundle.RegistryV1) []error {
 }
 
 // CheckPackageNameNotEmpty checks that PackageName is not empty
-func CheckPackageNameNotEmpty(rv1 *bundle.RegistryV1) []error {
+func CheckPackageNameNotEmpty(rv1 *registryv1.Bundle) []error {
 	if rv1.PackageName == "" {
 		return []error{errors.New("package name is empty")}
 	}
@@ -101,7 +100,7 @@ func CheckPackageNameNotEmpty(rv1 *bundle.RegistryV1) []error {
 
 // CheckConversionWebhookSupport checks that if the bundle cluster service version declares conversion webhook definitions,
 // that the bundle also only supports AllNamespaces install mode.
-func CheckConversionWebhookSupport(rv1 *bundle.RegistryV1) []error {
+func CheckConversionWebhookSupport(rv1 *registryv1.Bundle) []error {
 	var conversionWebhookNames []string
 	for _, wh := range rv1.CSV.Spec.WebhookDefinitions {
 		if wh.Type == v1alpha1.ConversionWebhook {
@@ -132,7 +131,7 @@ func CheckConversionWebhookSupport(rv1 *bundle.RegistryV1) []error {
 
 // CheckWebhookDeploymentReferentialIntegrity checks that each webhook definition in the csv
 // references an existing strategy deployment spec.
-func CheckWebhookDeploymentReferentialIntegrity(rv1 *bundle.RegistryV1) []error {
+func CheckWebhookDeploymentReferentialIntegrity(rv1 *registryv1.Bundle) []error {
 	webhooksByDeployment := map[string][]v1alpha1.WebhookDescription{}
 	for _, wh := range rv1.CSV.Spec.WebhookDefinitions {
 		webhooksByDeployment[wh.DeploymentName] = append(webhooksByDeployment[wh.DeploymentName], wh)
@@ -156,7 +155,7 @@ func CheckWebhookDeploymentReferentialIntegrity(rv1 *bundle.RegistryV1) []error 
 }
 
 // CheckWebhookNameUniqueness checks that each webhook definition of each type has a unique name.
-func CheckWebhookNameUniqueness(rv1 *bundle.RegistryV1) []error {
+func CheckWebhookNameUniqueness(rv1 *registryv1.Bundle) []error {
 	webhookNameSetByType := map[v1alpha1.WebhookAdmissionType]sets.Set[string]{}
 	duplicateWebhooksByType := map[v1alpha1.WebhookAdmissionType]sets.Set[string]{}
 	for _, wh := range rv1.CSV.Spec.WebhookDefinitions {
@@ -182,7 +181,7 @@ func CheckWebhookNameUniqueness(rv1 *bundle.RegistryV1) []error {
 }
 
 // CheckConversionWebhooksReferenceOwnedCRDs checks defined conversion webhooks reference bundle owned CRDs.
-func CheckConversionWebhooksReferenceOwnedCRDs(rv1 *bundle.RegistryV1) []error {
+func CheckConversionWebhooksReferenceOwnedCRDs(rv1 *registryv1.Bundle) []error {
 	//nolint:prealloc
 	var conversionWebhooks []v1alpha1.WebhookDescription
 	for _, wh := range rv1.CSV.Spec.WebhookDefinitions {
@@ -219,7 +218,7 @@ func CheckConversionWebhooksReferenceOwnedCRDs(rv1 *bundle.RegistryV1) []error {
 }
 
 // CheckConversionWebhookCRDReferenceUniqueness checks no two (or more) conversion webhooks reference the same CRD.
-func CheckConversionWebhookCRDReferenceUniqueness(rv1 *bundle.RegistryV1) []error {
+func CheckConversionWebhookCRDReferenceUniqueness(rv1 *registryv1.Bundle) []error {
 	crdToWh := map[string][]string{}
 	for _, wh := range rv1.CSV.Spec.WebhookDefinitions {
 		if wh.Type != v1alpha1.ConversionWebhook {
@@ -244,7 +243,7 @@ func CheckConversionWebhookCRDReferenceUniqueness(rv1 *bundle.RegistryV1) []erro
 }
 
 // CheckWebhookNameIsDNS1123SubDomain checks each webhook configuration name complies with Kubernetes resource naming conventions
-func CheckWebhookNameIsDNS1123SubDomain(rv1 *bundle.RegistryV1) []error {
+func CheckWebhookNameIsDNS1123SubDomain(rv1 *registryv1.Bundle) []error {
 	invalidWebhooksByType := map[v1alpha1.WebhookAdmissionType]map[string][]string{}
 	for _, wh := range rv1.CSV.Spec.WebhookDefinitions {
 		if _, ok := invalidWebhooksByType[wh.Type]; !ok {
@@ -280,7 +279,7 @@ var forbiddenAdmissionRegistrationResources = sets.New(
 )
 
 // CheckWebhookRules ensures webhook rules do not reference forbidden API groups or resources
-func CheckWebhookRules(rv1 *bundle.RegistryV1) []error {
+func CheckWebhookRules(rv1 *registryv1.Bundle) []error {
 	var errs []error
 	for _, wh := range rv1.CSV.Spec.WebhookDefinitions {
 		if wh.Type == v1alpha1.ConversionWebhook {

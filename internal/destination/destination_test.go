@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	bsemver "github.com/blang/semver/v4"
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	opversion "github.com/operator-framework/api/pkg/lib/version"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/transport"
 )
 
@@ -234,9 +234,8 @@ func assertValidChartArchive(t *testing.T, path, chartName string) {
 	assert.True(t, foundChart, "expected %s/Chart.yaml in archive, got: %v", chartName, names)
 }
 
-// minimalBundle creates a minimal valid bundle.RegistryV1 that passes validation.
-func minimalBundle() *bundle.RegistryV1 {
-	return &bundle.RegistryV1{
+func minimalBundle() *registryv1.Bundle {
+	return &registryv1.Bundle{
 		PackageName: "test-operator",
 		CSV: v1alpha1.ClusterServiceVersion{
 			ObjectMeta: metav1.ObjectMeta{
@@ -280,7 +279,7 @@ func minimalBundle() *bundle.RegistryV1 {
 }
 
 // minimalBundleWithVersion returns a bundle with a proper semver version for chart archive tests.
-func minimalBundleWithVersion() *bundle.RegistryV1 {
+func minimalBundleWithVersion() *registryv1.Bundle {
 	b := minimalBundle()
 	b.CSV.Spec.Version = opversion.OperatorVersion{Version: bsemver.MustParse("0.1.0")}
 	return b

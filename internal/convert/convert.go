@@ -4,19 +4,18 @@ import (
 	"errors"
 	"fmt"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 // BundleValidator validates a RegistryV1 bundle by executing a series of
 // checks on it and collecting any errors that were found
-type BundleValidator []func(v1 *bundle.RegistryV1) []error
+type BundleValidator []func(v1 *registryv1.Bundle) []error
 
-func (v BundleValidator) Validate(rv1 *bundle.RegistryV1) error {
+func (v BundleValidator) Validate(rv1 *registryv1.Bundle) error {
 	var errs []error
 	for _, validator := range v {
 		errs = append(errs, validator(rv1)...)
@@ -25,9 +24,9 @@ func (v BundleValidator) Validate(rv1 *bundle.RegistryV1) error {
 }
 
 // ResourceGenerator generates resources given a registry+v1 bundle and options
-type ResourceGenerator func(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error)
+type ResourceGenerator func(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error)
 
-func (g ResourceGenerator) GenerateResources(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func (g ResourceGenerator) GenerateResources(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	return g(rv1, opts)
 }
 
@@ -35,7 +34,7 @@ func (g ResourceGenerator) GenerateResources(rv1 *bundle.RegistryV1, opts Option
 // generated resources.
 type ResourceGenerators []ResourceGenerator
 
-func (r ResourceGenerators) GenerateResources(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func (r ResourceGenerators) GenerateResources(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	//nolint:prealloc
 	var renderedObjects []client.Object
 	for _, generator := range r {
@@ -70,7 +69,7 @@ func (o *Options) apply(opts ...Option) *Options {
 	return o
 }
 
-func (o *Options) validate(rv1 *bundle.RegistryV1) (*Options, []error) {
+func (o *Options) validate(rv1 *registryv1.Bundle) (*Options, []error) {
 	var errs []error
 	if o.UniqueNameGenerator == nil {
 		errs = append(errs, errors.New("unique name generator must be specified"))
@@ -109,7 +108,7 @@ type BundleConverter struct {
 	ResourceGenerators []ResourceGenerator
 }
 
-func (r BundleConverter) Convert(rv1 bundle.RegistryV1, installNamespace string, opts ...Option) ([]client.Object, error) {
+func (r BundleConverter) Convert(rv1 registryv1.Bundle, installNamespace string, opts ...Option) ([]client.Object, error) {
 	// validate bundle
 	if err := r.BundleValidator.Validate(&rv1); err != nil {
 		return nil, err
@@ -141,7 +140,7 @@ func DefaultUniqueNameGenerator(base string, o interface{}) string {
 	return ObjectNameForBaseAndSuffix(base, hashStr)
 }
 
-func validateTargetNamespaces(rv1 *bundle.RegistryV1, installNamespace string, targetNamespaces []string) error {
+func validateTargetNamespaces(rv1 *registryv1.Bundle, installNamespace string, targetNamespaces []string) error {
 	supportedInstallModes := supportedBundleInstallModes(rv1)
 
 	set := sets.New[string](targetNamespaces...)
@@ -177,7 +176,7 @@ func validateTargetNamespaces(rv1 *bundle.RegistryV1, installNamespace string, t
 	return fmt.Errorf("supported install modes %v do not support target namespaces %v", sets.List[v1alpha1.InstallModeType](supportedInstallModes), targetNamespaces)
 }
 
-func defaultTargetNamespacesForBundle(rv1 *bundle.RegistryV1) []string {
+func defaultTargetNamespacesForBundle(rv1 *registryv1.Bundle) []string {
 	supportedInstallModes := supportedBundleInstallModes(rv1)
 
 	if supportedInstallModes.Has(v1alpha1.InstallModeTypeAllNamespaces) {
@@ -187,7 +186,7 @@ func defaultTargetNamespacesForBundle(rv1 *bundle.RegistryV1) []string {
 	return nil
 }
 
-func supportedBundleInstallModes(rv1 *bundle.RegistryV1) sets.Set[v1alpha1.InstallModeType] {
+func supportedBundleInstallModes(rv1 *registryv1.Bundle) sets.Set[v1alpha1.InstallModeType] {
 	supportedInstallModes := sets.New[v1alpha1.InstallModeType]()
 	for _, im := range rv1.CSV.Spec.InstallModes {
 		if im.Supported {

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	registrybundle "github.com/operator-framework/operator-registry/pkg/lib/bundle"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -19,8 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 const (
@@ -49,7 +48,7 @@ var certVolumeConfigs = []certVolumeConfig{
 }
 
 // BundleCSVDeploymentGenerator generates all deployments defined in rv1's cluster service version (CSV).
-func BundleCSVDeploymentGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func BundleCSVDeploymentGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
@@ -86,7 +85,7 @@ func BundleCSVDeploymentGenerator(rv1 *bundle.RegistryV1, opts Options) ([]clien
 
 // BundleCSVPermissionsGenerator generates the Roles and RoleBindings based on bundle's cluster service version
 // permission spec.
-func BundleCSVPermissionsGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func BundleCSVPermissionsGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
@@ -119,7 +118,7 @@ func BundleCSVPermissionsGenerator(rv1 *bundle.RegistryV1, opts Options) ([]clie
 
 // BundleCSVClusterPermissionsGenerator generates ClusterRoles and ClusterRoleBindings based on the bundle's
 // cluster service version clusterPermission spec.
-func BundleCSVClusterPermissionsGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func BundleCSVClusterPermissionsGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
@@ -154,7 +153,7 @@ func BundleCSVClusterPermissionsGenerator(rv1 *bundle.RegistryV1, opts Options) 
 
 // BundleCSVServiceAccountGenerator generates ServiceAccount resources based on the bundle's cluster service version
 // permission and clusterPermission spec.
-func BundleCSVServiceAccountGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func BundleCSVServiceAccountGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
@@ -178,7 +177,7 @@ func BundleCSVServiceAccountGenerator(rv1 *bundle.RegistryV1, opts Options) ([]c
 }
 
 // BundleCRDGenerator generates CustomResourceDefinition resources from the registry+v1 bundle.
-func BundleCRDGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func BundleCRDGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
@@ -235,7 +234,7 @@ func BundleCRDGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, 
 }
 
 // BundleAdditionalResourcesGenerator generates resources for the additional resources included in the bundle.
-func BundleAdditionalResourcesGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func BundleAdditionalResourcesGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
@@ -257,7 +256,7 @@ func BundleAdditionalResourcesGenerator(rv1 *bundle.RegistryV1, opts Options) ([
 }
 
 // BundleValidatingWebhookResourceGenerator generates ValidatingAdmissionWebhookConfiguration resources.
-func BundleValidatingWebhookResourceGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func BundleValidatingWebhookResourceGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
@@ -305,7 +304,7 @@ func BundleValidatingWebhookResourceGenerator(rv1 *bundle.RegistryV1, opts Optio
 }
 
 // BundleMutatingWebhookResourceGenerator generates MutatingAdmissionWebhookConfiguration resources.
-func BundleMutatingWebhookResourceGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func BundleMutatingWebhookResourceGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
@@ -353,7 +352,7 @@ func BundleMutatingWebhookResourceGenerator(rv1 *bundle.RegistryV1, opts Options
 }
 
 // BundleDeploymentServiceResourceGenerator generates Service resources that support webhooks.
-func BundleDeploymentServiceResourceGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func BundleDeploymentServiceResourceGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	if rv1 == nil {
 		return nil, fmt.Errorf("bundle cannot be nil")
 	}
@@ -405,7 +404,7 @@ func BundleDeploymentServiceResourceGenerator(rv1 *bundle.RegistryV1, opts Optio
 }
 
 // CertProviderResourceGenerator generates any resources necessary for the CertificateProvider to function correctly.
-func CertProviderResourceGenerator(rv1 *bundle.RegistryV1, opts Options) ([]client.Object, error) {
+func CertProviderResourceGenerator(rv1 *registryv1.Bundle, opts Options) ([]client.Object, error) {
 	deploymentsWithWebhooks := sets.Set[string]{}
 
 	for _, wh := range rv1.CSV.Spec.WebhookDefinitions {

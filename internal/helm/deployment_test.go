@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,19 +15,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 func boolPtr(b bool) *bool { return &b }
 
-func makeDeploymentBundle(podSpec corev1.PodSpec, withWebhook bool) *bundle.RegistryV1 {
+func makeDeploymentBundle(podSpec corev1.PodSpec, withWebhook bool) *registryv1.Bundle {
 	if podSpec.Containers == nil {
 		podSpec.Containers = []corev1.Container{
 			{Name: "manager", Image: "registry.io/test-operator:v1.0.0"},
 		}
 	}
-	return makeMinimalBundle(func(b *bundle.RegistryV1) {
+	return makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []v1alpha1.StrategyDeploymentSpec{
 			{
 				Name: "controller-manager",
@@ -66,7 +65,7 @@ func makeDeploymentBundle(podSpec corev1.PodSpec, withWebhook bool) *bundle.Regi
 // renderDeployment generates a helm chart from the bundle, renders the
 // deployment template with the given values, and parses the result as a
 // Deployment.
-func renderDeployment(t *testing.T, b *bundle.RegistryV1, valOverrides map[string]any) appsv1.Deployment {
+func renderDeployment(t *testing.T, b *registryv1.Bundle, valOverrides map[string]any) appsv1.Deployment {
 	t.Helper()
 
 	rendered, err := renderChart(t, b, valOverrides)
@@ -777,7 +776,7 @@ func TestDeploymentContainerBase_AllFields(t *testing.T) {
 
 func TestDeploymentOptionalFields(t *testing.T) {
 	replicas := int32(3)
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []v1alpha1.StrategyDeploymentSpec{
 			{
 				Name:  "controller-manager",
@@ -864,7 +863,7 @@ func TestDeploymentAnnotations_YAMLSpecialValuesSurviveRoundTrip(t *testing.T) {
 }
 
 func TestValidateWatchNamespace_OwnNamespaceOnly_MatchesRelease(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallModes = []v1alpha1.InstallMode{
 			{Type: v1alpha1.InstallModeTypeOwnNamespace, Supported: true},
 		}
@@ -875,7 +874,7 @@ func TestValidateWatchNamespace_OwnNamespaceOnly_MatchesRelease(t *testing.T) {
 }
 
 func TestValidateWatchNamespace_OwnNamespaceOnly_DiffersFromRelease(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallModes = []v1alpha1.InstallMode{
 			{Type: v1alpha1.InstallModeTypeOwnNamespace, Supported: true},
 		}
@@ -887,7 +886,7 @@ func TestValidateWatchNamespace_OwnNamespaceOnly_DiffersFromRelease(t *testing.T
 }
 
 func TestValidateWatchNamespace_OwnNamespaceOnly_Empty(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallModes = []v1alpha1.InstallMode{
 			{Type: v1alpha1.InstallModeTypeOwnNamespace, Supported: true},
 		}
@@ -898,7 +897,7 @@ func TestValidateWatchNamespace_OwnNamespaceOnly_Empty(t *testing.T) {
 }
 
 func TestValidateWatchNamespace_SingleNamespaceOnly_DiffersFromRelease(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallModes = []v1alpha1.InstallMode{
 			{Type: v1alpha1.InstallModeTypeSingleNamespace, Supported: true},
 		}
@@ -909,7 +908,7 @@ func TestValidateWatchNamespace_SingleNamespaceOnly_DiffersFromRelease(t *testin
 }
 
 func TestValidateWatchNamespace_SingleNamespaceOnly_MatchesRelease(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallModes = []v1alpha1.InstallMode{
 			{Type: v1alpha1.InstallModeTypeSingleNamespace, Supported: true},
 		}
@@ -921,7 +920,7 @@ func TestValidateWatchNamespace_SingleNamespaceOnly_MatchesRelease(t *testing.T)
 }
 
 func TestValidateWatchNamespace_AllNamespaces_NoValidation(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallModes = []v1alpha1.InstallMode{
 			{Type: v1alpha1.InstallModeTypeAllNamespaces, Supported: true},
 		}
@@ -932,7 +931,7 @@ func TestValidateWatchNamespace_AllNamespaces_NoValidation(t *testing.T) {
 }
 
 func TestValidateWatchNamespace_AllAndSingle_NoValidation(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallModes = []v1alpha1.InstallMode{
 			{Type: v1alpha1.InstallModeTypeAllNamespaces, Supported: true},
 			{Type: v1alpha1.InstallModeTypeSingleNamespace, Supported: true},

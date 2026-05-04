@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
-func generateCRDs(b *bundle.RegistryV1) ([]byte, error) {
+func generateCRDs(b *registryv1.Bundle) ([]byte, error) {
 	if len(b.CRDs) == 0 {
 		return nil, nil
 	}

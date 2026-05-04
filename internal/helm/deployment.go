@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/convert"
 )
 
-func generateDeployments(b *bundle.RegistryV1, webhookDeployments sets.Set[string]) ([]byte, error) {
+func generateDeployments(b *registryv1.Bundle, webhookDeployments sets.Set[string]) ([]byte, error) {
 	var sb strings.Builder
 
 	sb.WriteString("{{- include \"validateWatchNamespace\" . -}}\n")
@@ -27,7 +27,7 @@ func generateDeployments(b *bundle.RegistryV1, webhookDeployments sets.Set[strin
 	return []byte(sb.String()), nil
 }
 
-func writeDeployment(sb *strings.Builder, b *bundle.RegistryV1, depSpec v1alpha1.StrategyDeploymentSpec, isWebhookDep bool) {
+func writeDeployment(sb *strings.Builder, b *registryv1.Bundle, depSpec v1alpha1.StrategyDeploymentSpec, isWebhookDep bool) {
 	certName := certNameForDeployment(depSpec.Name)
 
 	// --- metadata ---
