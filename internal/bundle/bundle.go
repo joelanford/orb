@@ -1,10 +1,9 @@
 package bundle
 
 import (
+	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 )
 
 // RegistryV1 represents a registry+v1 operator bundle.

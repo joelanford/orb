@@ -1,12 +1,27 @@
 version: "2"
 
+formatters:
+  enable:
+    - gci
+    - gofmt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/joelanford/orb)
+
 linters:
   enable:
+    - errcheck
     - errorlint
     - gocritic
+    - importas
+    - ineffassign
     - misspell
+    - staticcheck
     - unconvert
-    - revive
+    - unused
 
   settings:
     errcheck:
@@ -21,20 +36,18 @@ linters:
     gocritic:
       enabled-tags:
         - diagnostic
-    revive:
-      rules:
-        - name: exported
-          disabled: true
-        - name: package-comments
-          disabled: true
+    importas:
+      no-unaliased: true
+      alias:
+        - pkg: github.com/blang/semver/v4
+          alias: bsemver
+        - pkg: github.com/Masterminds/semver/v3
+          alias: mmsemver
 
   exclusions:
     paths:
       - internal/termimage/internal/rasterx
       - internal/termimage/internal/oksvg
     rules:
-      - path: internal/image/
-        linters: [revive]
-        text: "var-naming: avoid package names"
       - linters: [errcheck]
         text: "Error return value of `.*\\.Close` is not checked"

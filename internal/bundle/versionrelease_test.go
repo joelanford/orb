@@ -4,9 +4,10 @@ import (
 	"testing"
 
 	bsemver "github.com/blang/semver/v4"
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/joelanford/orb/internal/bundle"
 )
 
 func TestNewLegacyRegistryV1VersionRelease(t *testing.T) {

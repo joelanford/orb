@@ -11,9 +11,10 @@ import (
 	"io"
 	"strings"
 
+	"github.com/muesli/termenv"
+
 	"github.com/joelanford/orb/internal/termimage/internal/oksvg"
 	"github.com/joelanford/orb/internal/termimage/internal/rasterx"
-	"github.com/muesli/termenv"
 )
 
 // Render decodes an image from imgData and writes a half-block pixel

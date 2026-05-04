@@ -4,10 +4,9 @@ import (
 	"context"
 	"io"
 
+	libraryimage "github.com/joelanford/library-olm/image"
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"go.podman.io/image/v5/docker/reference"
-
-	libraryimage "github.com/joelanford/library-olm/image"
 )
 
 var _ libraryimage.Repository = (*progressRepository)(nil)

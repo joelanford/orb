@@ -9,7 +9,6 @@ import (
 	"github.com/operator-framework/operator-registry/alpha/declcfg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	_ "modernc.org/sqlite"
 )
 
