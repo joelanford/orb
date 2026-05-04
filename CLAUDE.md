@@ -9,8 +9,8 @@ All logic lives in `internal/`; the only entry point is `cmd/orb/main.go`. No ex
 Key packages:
 - `internal/cmd/` — cobra command definitions
 - `internal/catalog/` — catalog DB (SQLite), FBC parsing, resolution
-- `internal/bundle/` — bundle loading and version-release types
-- `internal/convert/` — bundle-to-manifest conversion
+- `internal/bundle/` — version-release types, vendored operator-registry types
+- `internal/convert/` — naming and hashing utilities (used by helm; conversion and validation are in library-olm)
 - `internal/destination/` — output targets (plain manifests, Helm charts)
 - `internal/helm/` — Helm chart generation and packaging
 - `internal/source/` — registry+v1 bundle source loading
