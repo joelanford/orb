@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,13 +15,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 // makeWebhookBundle returns a bundle with the given webhook definitions.
-func makeWebhookBundle(webhooks []v1alpha1.WebhookDescription) *bundle.RegistryV1 {
-	return makeMinimalBundle(func(b *bundle.RegistryV1) {
+func makeWebhookBundle(webhooks []v1alpha1.WebhookDescription) *registryv1.Bundle {
+	return makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = []v1alpha1.StrategyDeploymentSpec{
 			{
 				Name: "controller-manager",
@@ -48,7 +47,7 @@ func makeWebhookBundle(webhooks []v1alpha1.WebhookDescription) *bundle.RegistryV
 // renderWebhookConfigs generates a helm chart from the bundle, renders the
 // webhook.yaml template with the given values, and parses the result into
 // ValidatingWebhookConfiguration and MutatingWebhookConfiguration slices.
-func renderWebhookConfigs(t *testing.T, b *bundle.RegistryV1, valOverrides map[string]any) (
+func renderWebhookConfigs(t *testing.T, b *registryv1.Bundle, valOverrides map[string]any) (
 	[]admissionregistrationv1.ValidatingWebhookConfiguration,
 	[]admissionregistrationv1.MutatingWebhookConfiguration,
 ) {
@@ -127,7 +126,7 @@ func renderWebhookConfigs(t *testing.T, b *bundle.RegistryV1, valOverrides map[s
 // renderWebhookServices generates a helm chart from the bundle, renders the
 // service.yaml template with the given values, and parses the result into
 // Service slices.
-func renderWebhookServices(t *testing.T, b *bundle.RegistryV1, valOverrides map[string]any) []corev1.Service {
+func renderWebhookServices(t *testing.T, b *registryv1.Bundle, valOverrides map[string]any) []corev1.Service {
 	t.Helper()
 
 	rendered, err := renderChart(t, b, valOverrides)
@@ -283,7 +282,7 @@ func TestWebhook_Mutating(t *testing.T) {
 func TestWebhook_SkipsConversion(t *testing.T) {
 	path := "/convert"
 
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CRDs = []apiextensionsv1.CustomResourceDefinition{
 			{
 				ObjectMeta: metav1.ObjectMeta{Name: "tests.example.com"},

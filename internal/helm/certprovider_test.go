@@ -4,23 +4,22 @@ import (
 	"strings"
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 // makeCertProviderBundle returns a bundle with a validating webhook so that
 // cert-manager resources are generated.
-func makeCertProviderBundle() *bundle.RegistryV1 {
+func makeCertProviderBundle() *registryv1.Bundle {
 	failPolicy := admissionregistrationv1.Fail
 	sideEffects := admissionregistrationv1.SideEffectClassNone
 	path := "/validate"
-	return makeMinimalBundle(func(b *bundle.RegistryV1) {
+	return makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.WebhookDefinitions = []v1alpha1.WebhookDescription{
 			{
 				Type:                    v1alpha1.ValidatingAdmissionWebhook,
@@ -39,7 +38,7 @@ func makeCertProviderBundle() *bundle.RegistryV1 {
 // renderCertProvider generates a helm chart from the bundle, renders the
 // cert-manager.yaml template with the given values, and parses the result
 // into a slice of unstructured.Unstructured objects.
-func renderCertProvider(t *testing.T, b *bundle.RegistryV1, valOverrides map[string]any) []unstructured.Unstructured {
+func renderCertProvider(t *testing.T, b *registryv1.Bundle, valOverrides map[string]any) []unstructured.Unstructured {
 	t.Helper()
 
 	rendered, err := renderChart(t, b, valOverrides)

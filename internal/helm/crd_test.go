@@ -4,19 +4,18 @@ import (
 	"strings"
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 // makeCRDBundle returns a minimal bundle with a CRD and optional conversion webhook.
-func makeCRDBundle(crd apiextensionsv1.CustomResourceDefinition, withConversionWebhook bool) *bundle.RegistryV1 {
-	return makeMinimalBundle(func(b *bundle.RegistryV1) {
+func makeCRDBundle(crd apiextensionsv1.CustomResourceDefinition, withConversionWebhook bool) *registryv1.Bundle {
+	return makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CRDs = []apiextensionsv1.CustomResourceDefinition{crd}
 		b.CSV.Spec.CustomResourceDefinitions.Owned = []v1alpha1.CRDDescription{
 			{Name: crd.Name, Version: crd.Spec.Versions[0].Name, Kind: crd.Spec.Names.Kind},
@@ -41,7 +40,7 @@ func makeCRDBundle(crd apiextensionsv1.CustomResourceDefinition, withConversionW
 // renderCRDs generates a helm chart from the bundle, renders the crd.yaml
 // template with the given values, and parses the result into a slice of
 // CustomResourceDefinition structs.
-func renderCRDs(t *testing.T, b *bundle.RegistryV1, valOverrides map[string]any) []apiextensionsv1.CustomResourceDefinition {
+func renderCRDs(t *testing.T, b *registryv1.Bundle, valOverrides map[string]any) []apiextensionsv1.CustomResourceDefinition {
 	t.Helper()
 
 	rendered, err := renderChart(t, b, valOverrides)

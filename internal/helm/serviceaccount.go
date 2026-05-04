@@ -5,12 +5,11 @@ import (
 	"slices"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
-func generateServiceAccounts(b *bundle.RegistryV1) ([]byte, error) {
+func generateServiceAccounts(b *registryv1.Bundle) ([]byte, error) {
 	allPermissions := slices.Concat(
 		b.CSV.Spec.InstallStrategy.StrategySpec.Permissions,
 		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions,

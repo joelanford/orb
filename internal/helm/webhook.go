@@ -7,15 +7,14 @@ import (
 	"strconv"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
-func generateWebhooks(b *bundle.RegistryV1) ([]byte, error) {
+func generateWebhooks(b *registryv1.Bundle) ([]byte, error) {
 	var sb strings.Builder
 
 	for _, wh := range b.CSV.Spec.WebhookDefinitions {
@@ -134,7 +133,7 @@ func writeWebhookCertAnnotations(sb *strings.Builder, certName string) {
 }
 
 // generateWebhookServices generates Service resources for webhook deployments.
-func generateWebhookServices(b *bundle.RegistryV1) ([]byte, error) {
+func generateWebhookServices(b *registryv1.Bundle) ([]byte, error) {
 	webhookServicePortsByDeployment := map[string]sets.Set[corev1.ServicePort]{}
 	for _, wh := range b.CSV.Spec.WebhookDefinitions {
 		if _, ok := webhookServicePortsByDeployment[wh.DeploymentName]; !ok {

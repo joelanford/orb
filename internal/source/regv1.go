@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/joelanford/library-olm/image"
 	imagebundle "github.com/joelanford/library-olm/image/bundle"
 	dockerTransport "go.podman.io/image/v5/docker"
@@ -18,7 +19,6 @@ import (
 	"go.podman.io/image/v5/pkg/compression"
 	"go.podman.io/image/v5/types"
 
-	"github.com/joelanford/orb/internal/bundle"
 	orbimage "github.com/joelanford/orb/internal/image"
 	"github.com/joelanford/orb/internal/transport"
 )
@@ -28,7 +28,7 @@ type regv1Docker struct {
 	opts Options
 }
 
-func (s *regv1Docker) Read(ctx context.Context) (*bundle.RegistryV1, error) {
+func (s *regv1Docker) Read(ctx context.Context) (*registryv1.Bundle, error) {
 	imgRef, err := dockerTransport.ParseReference("//" + s.ref)
 	if err != nil {
 		return nil, fmt.Errorf("parsing docker reference: %w", err)
@@ -41,7 +41,7 @@ type regv1OCI struct {
 	opts Options
 }
 
-func (s *regv1OCI) Read(ctx context.Context) (*bundle.RegistryV1, error) {
+func (s *regv1OCI) Read(ctx context.Context) (*registryv1.Bundle, error) {
 	imgRef, err := layoutTransport.ParseReference(s.ref)
 	if err != nil {
 		return nil, fmt.Errorf("parsing oci layout reference: %w", err)
@@ -54,7 +54,7 @@ type regv1OCIArchive struct {
 	opts Options
 }
 
-func (s *regv1OCIArchive) Read(ctx context.Context) (*bundle.RegistryV1, error) {
+func (s *regv1OCIArchive) Read(ctx context.Context) (*registryv1.Bundle, error) {
 	imgRef, err := archiveTransport.ParseReference(s.ref)
 	if err != nil {
 		return nil, fmt.Errorf("parsing oci-archive reference: %w", err)
@@ -67,8 +67,8 @@ type regv1Dir struct {
 	opts Options
 }
 
-func (s *regv1Dir) Read(_ context.Context) (*bundle.RegistryV1, error) {
-	rv1, err := bundle.FromFS(os.DirFS(transport.ExpandPath(s.ref)))
+func (s *regv1Dir) Read(_ context.Context) (*registryv1.Bundle, error) {
+	rv1, err := registryv1.FromFS(os.DirFS(transport.ExpandPath(s.ref)))
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ type regv1Tar struct {
 	opts Options
 }
 
-func (s *regv1Tar) Read(_ context.Context) (*bundle.RegistryV1, error) {
+func (s *regv1Tar) Read(_ context.Context) (*registryv1.Bundle, error) {
 	tmpDir, err := os.MkdirTemp("", "orb-tar-")
 	if err != nil {
 		return nil, fmt.Errorf("creating temp directory: %w", err)
@@ -104,7 +104,7 @@ func (s *regv1Tar) Read(_ context.Context) (*bundle.RegistryV1, error) {
 		return nil, fmt.Errorf("extracting tar: %w", err)
 	}
 
-	rv1, err := bundle.FromFS(os.DirFS(tmpDir))
+	rv1, err := registryv1.FromFS(os.DirFS(tmpDir))
 	if err != nil {
 		return nil, fmt.Errorf("parsing bundle from tar: %w", err)
 	}
@@ -165,7 +165,7 @@ func untar(r io.Reader, dest string) error {
 	return nil
 }
 
-func readFromImage(ctx context.Context, imgRef types.ImageReference, sysCtx *types.SystemContext) (*bundle.RegistryV1, error) {
+func readFromImage(ctx context.Context, imgRef types.ImageReference, sysCtx *types.SystemContext) (*registryv1.Bundle, error) {
 	client, err := image.NewContainersImageRepository(ctx, imgRef, sysCtx)
 	if err != nil {
 		return nil, fmt.Errorf("creating image repository: %w", err)
@@ -194,7 +194,7 @@ func readFromImage(ctx context.Context, imgRef types.ImageReference, sysCtx *typ
 		return nil, fmt.Errorf("unpacking image: %w", err)
 	}
 
-	rv1, err := bundle.FromFS(os.DirFS(tmpDir))
+	rv1, err := registryv1.FromFS(os.DirFS(tmpDir))
 	if err != nil {
 		return nil, fmt.Errorf("parsing bundle: %w", err)
 	}

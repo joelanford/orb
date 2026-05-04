@@ -5,13 +5,12 @@ import (
 	"strings"
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 // rbacObjects holds the parsed RBAC resources from a rendered clusterrole.yaml.
@@ -25,7 +24,7 @@ type rbacObjects struct {
 // renderRBACTemplate generates a helm chart from the bundle, renders the
 // clusterrole.yaml template with the given values, and parses the result into
 // typed RBAC objects.
-func renderRBACTemplate(t *testing.T, b *bundle.RegistryV1, valOverrides map[string]any) rbacObjects {
+func renderRBACTemplate(t *testing.T, b *registryv1.Bundle, valOverrides map[string]any) rbacObjects {
 	t.Helper()
 
 	rendered, err := renderChart(t, b, valOverrides)
@@ -83,7 +82,7 @@ func renderRBACTemplate(t *testing.T, b *bundle.RegistryV1, valOverrides map[str
 // --- ClusterPermissions ---
 
 func TestRBAC_ClusterPermissions(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions = []v1alpha1.StrategyDeploymentPermissions{
 			{
 				ServiceAccountName: "controller-manager",
@@ -116,7 +115,7 @@ func TestRBAC_ClusterPermissions(t *testing.T) {
 }
 
 func TestRBAC_ClusterPermissions_MultipleRules(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions = []v1alpha1.StrategyDeploymentPermissions{
 			{
 				ServiceAccountName: "controller-manager",
@@ -142,7 +141,7 @@ func TestRBAC_ClusterPermissions_MultipleRules(t *testing.T) {
 // --- Permissions (AllNamespaces mode: watchNamespace="") ---
 
 func TestRBAC_Permissions_AllNamespaces(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.Permissions = []v1alpha1.StrategyDeploymentPermissions{
 			{
 				ServiceAccountName: "my-sa",
@@ -181,7 +180,7 @@ func TestRBAC_Permissions_AllNamespaces(t *testing.T) {
 // --- Permissions (SingleNamespace mode: watchNamespace="some-ns") ---
 
 func TestRBAC_Permissions_SingleNamespace(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.Permissions = []v1alpha1.StrategyDeploymentPermissions{
 			{
 				ServiceAccountName: "my-sa",
@@ -220,7 +219,7 @@ func TestRBAC_Permissions_SingleNamespace(t *testing.T) {
 // --- Both ClusterPermissions and Permissions ---
 
 func TestRBAC_ClusterPermissionsAndPermissions_AllNamespaces(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions = []v1alpha1.StrategyDeploymentPermissions{
 			{
 				ServiceAccountName: "controller-manager",
@@ -258,7 +257,7 @@ func TestRBAC_ClusterPermissionsAndPermissions_AllNamespaces(t *testing.T) {
 }
 
 func TestRBAC_ClusterPermissionsAndPermissions_SingleNamespace(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions = []v1alpha1.StrategyDeploymentPermissions{
 			{
 				ServiceAccountName: "controller-manager",
@@ -295,7 +294,7 @@ func TestRBAC_ClusterPermissionsAndPermissions_SingleNamespace(t *testing.T) {
 // --- Default service account name ---
 
 func TestRBAC_DefaultServiceAccountName(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions = []v1alpha1.StrategyDeploymentPermissions{
 			{
 				ServiceAccountName: "", // empty => "default"

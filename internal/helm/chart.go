@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"helm.sh/helm/v4/pkg/chart/common"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/yaml"
 
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/convert"
 )
 
@@ -21,8 +21,8 @@ import (
 const BundleNameAnnotation = "orb.operatorframework.io/bundle-name"
 
 // Generate produces a Helm *chart.Chart from a registry+v1 bundle.
-func Generate(b *bundle.RegistryV1) (*chart.Chart, error) {
-	if err := convert.Converter.BundleValidator.Validate(b); err != nil {
+func Generate(b *registryv1.Bundle) (*chart.Chart, error) {
+	if err := registryv1.Validate(*b); err != nil {
 		return nil, fmt.Errorf("bundle validation failed: %w", err)
 	}
 

@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/joelanford/orb/internal/bundle"
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
+
 	"github.com/joelanford/orb/internal/transport"
 )
 
 // Source reads a bundle from a source location.
 type Source interface {
-	Read(ctx context.Context) (*bundle.RegistryV1, error)
+	Read(ctx context.Context) (*registryv1.Bundle, error)
 }
 
 // Options holds authentication and TLS settings for source transports.

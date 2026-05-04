@@ -4,19 +4,18 @@ import (
 	"strings"
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
-type bundleOption func(*bundle.RegistryV1)
+type bundleOption func(*registryv1.Bundle)
 
-func makeBundle(opts ...bundleOption) *bundle.RegistryV1 {
-	b := &bundle.RegistryV1{}
+func makeBundle(opts ...bundleOption) *registryv1.Bundle {
+	b := &registryv1.Bundle{}
 	for _, opt := range opts {
 		opt(b)
 	}
@@ -24,13 +23,13 @@ func makeBundle(opts ...bundleOption) *bundle.RegistryV1 {
 }
 
 func withPackageName(name string) bundleOption {
-	return func(b *bundle.RegistryV1) {
+	return func(b *registryv1.Bundle) {
 		b.PackageName = name
 	}
 }
 
 func withDeploymentSpecs(names ...string) bundleOption {
-	return func(b *bundle.RegistryV1) {
+	return func(b *registryv1.Bundle) {
 		for _, name := range names {
 			b.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs = append(
 				b.CSV.Spec.InstallStrategy.StrategySpec.DeploymentSpecs,
@@ -41,7 +40,7 @@ func withDeploymentSpecs(names ...string) bundleOption {
 }
 
 func withCRDs(names ...string) bundleOption {
-	return func(b *bundle.RegistryV1) {
+	return func(b *registryv1.Bundle) {
 		for _, name := range names {
 			b.CRDs = append(b.CRDs, apiextensionsv1.CustomResourceDefinition{
 				Spec: apiextensionsv1.CustomResourceDefinitionSpec{
@@ -56,7 +55,7 @@ func withCRDs(names ...string) bundleOption {
 }
 
 func withOwnedCRDs(names ...string) bundleOption {
-	return func(b *bundle.RegistryV1) {
+	return func(b *registryv1.Bundle) {
 		for _, name := range names {
 			b.CSV.Spec.CustomResourceDefinitions.Owned = append(
 				b.CSV.Spec.CustomResourceDefinitions.Owned,
@@ -67,7 +66,7 @@ func withOwnedCRDs(names ...string) bundleOption {
 }
 
 func withInstallModes(modes ...v1alpha1.InstallModeType) bundleOption {
-	return func(b *bundle.RegistryV1) {
+	return func(b *registryv1.Bundle) {
 		for _, mode := range modes {
 			b.CSV.Spec.InstallModes = append(b.CSV.Spec.InstallModes, v1alpha1.InstallMode{
 				Type:      mode,
@@ -78,7 +77,7 @@ func withInstallModes(modes ...v1alpha1.InstallModeType) bundleOption {
 }
 
 func withWebhookDefinitions(whs ...v1alpha1.WebhookDescription) bundleOption {
-	return func(b *bundle.RegistryV1) {
+	return func(b *registryv1.Bundle) {
 		b.CSV.Spec.WebhookDefinitions = append(b.CSV.Spec.WebhookDefinitions, whs...)
 	}
 }
@@ -86,7 +85,7 @@ func withWebhookDefinitions(whs ...v1alpha1.WebhookDescription) bundleOption {
 func TestCheckDeploymentSpecUniqueness(t *testing.T) {
 	tests := []struct {
 		name      string
-		bundle    *bundle.RegistryV1
+		bundle    *registryv1.Bundle
 		wantErrs  int
 		wantSubst []string
 	}{
@@ -128,7 +127,7 @@ func TestCheckDeploymentSpecUniqueness(t *testing.T) {
 func TestCheckDeploymentNameIsDNS1123SubDomain(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -159,7 +158,7 @@ func TestCheckDeploymentNameIsDNS1123SubDomain(t *testing.T) {
 func TestCheckOwnedCRDExistence(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -190,7 +189,7 @@ func TestCheckOwnedCRDExistence(t *testing.T) {
 func TestCheckCRDResourceUniqueness(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -221,7 +220,7 @@ func TestCheckCRDResourceUniqueness(t *testing.T) {
 func TestCheckPackageNameNotEmpty(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -247,7 +246,7 @@ func TestCheckPackageNameNotEmpty(t *testing.T) {
 func TestCheckConversionWebhookSupport(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -296,7 +295,7 @@ func TestCheckConversionWebhookSupport(t *testing.T) {
 func TestCheckWebhookDeploymentReferentialIntegrity(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -341,7 +340,7 @@ func TestCheckWebhookDeploymentReferentialIntegrity(t *testing.T) {
 func TestCheckWebhookNameUniqueness(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -387,7 +386,7 @@ func TestCheckWebhookNameUniqueness(t *testing.T) {
 func TestCheckConversionWebhooksReferenceOwnedCRDs(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -437,7 +436,7 @@ func TestCheckConversionWebhooksReferenceOwnedCRDs(t *testing.T) {
 func TestCheckConversionWebhookCRDReferenceUniqueness(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -489,7 +488,7 @@ func TestCheckConversionWebhookCRDReferenceUniqueness(t *testing.T) {
 func TestCheckWebhookNameIsDNS1123SubDomain(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{
@@ -525,7 +524,7 @@ func TestCheckWebhookNameIsDNS1123SubDomain(t *testing.T) {
 func TestCheckWebhookRules(t *testing.T) {
 	tests := []struct {
 		name     string
-		bundle   *bundle.RegistryV1
+		bundle   *registryv1.Bundle
 		wantErrs int
 	}{
 		{

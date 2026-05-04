@@ -4,20 +4,19 @@ import (
 	"strings"
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 // renderServiceAccounts generates a helm chart from the bundle, renders the
 // serviceaccount template with the given values, and parses the result as a
 // slice of ServiceAccount structs.
-func renderServiceAccounts(t *testing.T, b *bundle.RegistryV1) []corev1.ServiceAccount {
+func renderServiceAccounts(t *testing.T, b *registryv1.Bundle) []corev1.ServiceAccount {
 	t.Helper()
 
 	rendered, err := renderChart(t, b, map[string]any{})
@@ -49,8 +48,8 @@ func renderServiceAccounts(t *testing.T, b *bundle.RegistryV1) []corev1.ServiceA
 	return result
 }
 
-func makeServiceAccountBundle(permissions []v1alpha1.StrategyDeploymentPermissions, clusterPermissions []v1alpha1.StrategyDeploymentPermissions) *bundle.RegistryV1 {
-	return makeMinimalBundle(func(b *bundle.RegistryV1) {
+func makeServiceAccountBundle(permissions []v1alpha1.StrategyDeploymentPermissions, clusterPermissions []v1alpha1.StrategyDeploymentPermissions) *registryv1.Bundle {
+	return makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.Permissions = permissions
 		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions = clusterPermissions
 	})

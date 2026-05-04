@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	bsemver "github.com/blang/semver/v4"
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	opversion "github.com/operator-framework/api/pkg/lib/version"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
@@ -20,13 +21,11 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
-// makeMinimalBundle returns a minimal valid *bundle.RegistryV1.
-func makeMinimalBundle(opts ...func(*bundle.RegistryV1)) *bundle.RegistryV1 {
-	b := &bundle.RegistryV1{
+// makeMinimalBundle returns a minimal valid *registryv1.Bundle.
+func makeMinimalBundle(opts ...func(*registryv1.Bundle)) *registryv1.Bundle {
+	b := &registryv1.Bundle{
 		PackageName: "test-operator",
 		CSV: v1alpha1.ClusterServiceVersion{
 			ObjectMeta: metav1.ObjectMeta{
@@ -80,7 +79,7 @@ func semverVersion(v string) opversion.OperatorVersion {
 
 // renderChart generates a chart from the bundle and renders all templates.
 // Returns an error if rendering fails (e.g., due to {{ fail }}).
-func renderChart(t *testing.T, b *bundle.RegistryV1, valOverrides map[string]any) (map[string]string, error) {
+func renderChart(t *testing.T, b *registryv1.Bundle, valOverrides map[string]any) (map[string]string, error) {
 	t.Helper()
 
 	c, err := Generate(b)
@@ -137,7 +136,7 @@ func TestGenerate_MinimalBundle(t *testing.T) {
 }
 
 func TestGenerate_WithCRDs(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CRDs = []apiextensionsv1.CustomResourceDefinition{
 			{
 				ObjectMeta: metav1.ObjectMeta{Name: "tests.example.com"},
@@ -168,7 +167,7 @@ func TestGenerate_WithWebhooks(t *testing.T) {
 	sideEffects := admissionregistrationv1.SideEffectClassNone
 	path := "/validate"
 
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.WebhookDefinitions = []v1alpha1.WebhookDescription{
 			{
 				Type:                    v1alpha1.ValidatingAdmissionWebhook,
@@ -208,7 +207,7 @@ func TestGenerate_WithWebhooks(t *testing.T) {
 func TestGenerate_WithConversionWebhook(t *testing.T) {
 	path := "/convert"
 
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallModes = []v1alpha1.InstallMode{
 			{Type: v1alpha1.InstallModeTypeAllNamespaces, Supported: true},
 		}
@@ -254,7 +253,7 @@ func TestGenerate_WithConversionWebhook(t *testing.T) {
 }
 
 func TestGenerate_WithAdditionalResources(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.Others = []unstructured.Unstructured{
 			{
 				Object: map[string]interface{}{
@@ -278,7 +277,7 @@ func TestGenerate_WithAdditionalResources(t *testing.T) {
 }
 
 func TestGenerate_WithPermissions(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.CSV.Spec.InstallStrategy.StrategySpec.ClusterPermissions = []v1alpha1.StrategyDeploymentPermissions{
 			{
 				ServiceAccountName: "controller-manager",
@@ -295,7 +294,7 @@ func TestGenerate_WithPermissions(t *testing.T) {
 }
 
 func TestGenerate_ValidationFailure(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.PackageName = ""
 	})
 

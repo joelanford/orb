@@ -4,20 +4,20 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/joelanford/orb/internal/bundle"
-	"github.com/joelanford/orb/internal/convert"
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
+
 	"github.com/joelanford/orb/internal/transport"
 )
 
 // Destination writes a bundle to a destination location.
 type Destination interface {
-	Write(ctx context.Context, b *bundle.RegistryV1) error
+	Write(ctx context.Context, b *registryv1.Bundle) error
 }
 
 // Options holds authentication, TLS, and render settings for destination transports.
 type Options struct {
 	Namespace   string
-	ConvertOpts []convert.Option
+	ConvertOpts []registryv1.RenderOption
 }
 
 func NewHelm(tr transport.Ref, opts Options) (Destination, error) {

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,44 +12,42 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 func TestBundleValidator_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
 		v       BundleValidator
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		wantErr bool
 	}{
 		{
 			name: "no validators",
 			v:    BundleValidator{},
-			rv1:  &bundle.RegistryV1{},
+			rv1:  &registryv1.Bundle{},
 		},
 		{
 			name: "passing validator",
 			v: BundleValidator{
-				func(_ *bundle.RegistryV1) []error { return nil },
+				func(_ *registryv1.Bundle) []error { return nil },
 			},
-			rv1: &bundle.RegistryV1{},
+			rv1: &registryv1.Bundle{},
 		},
 		{
 			name: "failing validator",
 			v: BundleValidator{
-				func(_ *bundle.RegistryV1) []error { return []error{assert.AnError} },
+				func(_ *registryv1.Bundle) []error { return []error{assert.AnError} },
 			},
-			rv1:     &bundle.RegistryV1{},
+			rv1:     &registryv1.Bundle{},
 			wantErr: true,
 		},
 		{
 			name: "mixed validators",
 			v: BundleValidator{
-				func(_ *bundle.RegistryV1) []error { return nil },
-				func(_ *bundle.RegistryV1) []error { return []error{assert.AnError} },
+				func(_ *registryv1.Bundle) []error { return nil },
+				func(_ *registryv1.Bundle) []error { return []error{assert.AnError} },
 			},
-			rv1:     &bundle.RegistryV1{},
+			rv1:     &registryv1.Bundle{},
 			wantErr: true,
 		},
 	}
@@ -71,35 +70,35 @@ func TestResourceGenerators_GenerateResources(t *testing.T) {
 	tests := []struct {
 		name    string
 		gens    ResourceGenerators
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		wantErr bool
 		wantLen int
 	}{
 		{
 			name: "no generators",
 			gens: ResourceGenerators{},
-			rv1:  &bundle.RegistryV1{},
+			rv1:  &registryv1.Bundle{},
 		},
 		{
 			name: "single generator",
 			gens: ResourceGenerators{
-				func(_ *bundle.RegistryV1, _ Options) ([]client.Object, error) {
+				func(_ *registryv1.Bundle, _ Options) ([]client.Object, error) {
 					return []client.Object{
 						CreateServiceAccountResource("test-sa", "test-ns"),
 					}, nil
 				},
 			},
-			rv1:     &bundle.RegistryV1{},
+			rv1:     &registryv1.Bundle{},
 			wantLen: 1,
 		},
 		{
 			name: "error propagation",
 			gens: ResourceGenerators{
-				func(_ *bundle.RegistryV1, _ Options) ([]client.Object, error) {
+				func(_ *registryv1.Bundle, _ Options) ([]client.Object, error) {
 					return nil, assert.AnError
 				},
 			},
-			rv1:     &bundle.RegistryV1{},
+			rv1:     &registryv1.Bundle{},
 			wantErr: true,
 		},
 	}
@@ -121,7 +120,7 @@ func TestBundleConverter_Convert(t *testing.T) {
 	tests := []struct {
 		name    string
 		bc      BundleConverter
-		rv1     bundle.RegistryV1
+		rv1     registryv1.Bundle
 		ns      string
 		opts    []Option
 		wantErr bool
@@ -132,14 +131,14 @@ func TestBundleConverter_Convert(t *testing.T) {
 			bc: BundleConverter{
 				BundleValidator: BundleValidator{},
 				ResourceGenerators: []ResourceGenerator{
-					func(_ *bundle.RegistryV1, _ Options) ([]client.Object, error) {
+					func(_ *registryv1.Bundle, _ Options) ([]client.Object, error) {
 						return []client.Object{
 							CreateServiceAccountResource("sa", "ns"),
 						}, nil
 					},
 				},
 			},
-			rv1: bundle.RegistryV1{
+			rv1: registryv1.Bundle{
 				PackageName: "test",
 				CSV: v1alpha1.ClusterServiceVersion{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-csv"},
@@ -169,10 +168,10 @@ func TestBundleConverter_Convert(t *testing.T) {
 			name: "validation fails",
 			bc: BundleConverter{
 				BundleValidator: BundleValidator{
-					func(_ *bundle.RegistryV1) []error { return []error{assert.AnError} },
+					func(_ *registryv1.Bundle) []error { return []error{assert.AnError} },
 				},
 			},
-			rv1:     bundle.RegistryV1{},
+			rv1:     registryv1.Bundle{},
 			ns:      "operator-ns",
 			wantErr: true,
 		},
@@ -181,7 +180,7 @@ func TestBundleConverter_Convert(t *testing.T) {
 			bc: BundleConverter{
 				BundleValidator: BundleValidator{},
 			},
-			rv1: bundle.RegistryV1{
+			rv1: registryv1.Bundle{
 				PackageName: "test",
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{
@@ -340,7 +339,7 @@ func TestValidateTargetNamespaces(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rv1 := &bundle.RegistryV1{
+			rv1 := &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{
 						InstallModes: tt.installModes,

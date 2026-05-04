@@ -5,12 +5,11 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/spf13/cobra"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/yaml"
 
-	"github.com/joelanford/orb/internal/convert"
-	"github.com/joelanford/orb/internal/convert/certproviders"
 	"github.com/joelanford/orb/internal/destination"
 	"github.com/joelanford/orb/internal/source"
 	"github.com/joelanford/orb/internal/transport"
@@ -166,7 +165,7 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 	}
 
 	// Build render options
-	var ropts []convert.Option
+	var ropts []registryv1.RenderOption
 
 	// Process config file if provided
 	if plainOpts.configFile != "" {
@@ -175,7 +174,7 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 			return fmt.Errorf("loading config file: %w", err)
 		}
 		if bundleCfg.WatchNamespace != "" {
-			ropts = append(ropts, convert.WithTargetNamespaces(bundleCfg.WatchNamespace))
+			ropts = append(ropts, registryv1.WithTargetNamespaces(bundleCfg.WatchNamespace))
 		}
 	}
 
@@ -185,7 +184,7 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 		if err != nil {
 			return err
 		}
-		ropts = append(ropts, convert.WithCertificateProvider(certProv))
+		ropts = append(ropts, registryv1.WithCertificateProvider(certProv))
 	}
 
 	dest, err := destination.NewPlain(destRef, destination.Options{
@@ -238,12 +237,12 @@ func runConvertHelm(cmd *cobra.Command, args []string) error {
 	return dest.Write(ctx, b)
 }
 
-func getCertificateProvider(provider string) (convert.CertificateProvider, error) {
+func getCertificateProvider(provider string) (registryv1.CertificateProvider, error) {
 	switch provider {
 	case "cert-manager":
-		return certproviders.CertManagerCertificateProvider{}, nil
+		return registryv1.CertManagerCertificateProvider{}, nil
 	case "service-ca":
-		return certproviders.OpenshiftServiceCaCertificateProvider{}, nil
+		return registryv1.OpenshiftServiceCACertificateProvider{}, nil
 	default:
 		return nil, fmt.Errorf("unknown certificate provider: %q", provider)
 	}

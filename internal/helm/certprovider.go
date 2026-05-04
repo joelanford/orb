@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/convert"
 )
 
-func generateCertProvider(b *bundle.RegistryV1) ([]byte, error) {
+func generateCertProvider(b *registryv1.Bundle) ([]byte, error) {
 	webhookDeployments := sets.New[string]()
 	for _, wh := range b.CSV.Spec.WebhookDefinitions {
 		webhookDeployments.Insert(wh.DeploymentName)

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/helm"
 	"github.com/joelanford/orb/internal/transport"
 )
@@ -19,7 +19,7 @@ type helmDocker struct {
 	opts Options
 }
 
-func (d *helmDocker) Write(_ context.Context, _ *bundle.RegistryV1) error {
+func (d *helmDocker) Write(_ context.Context, _ *registryv1.Bundle) error {
 	return fmt.Errorf("helm docker destination not yet implemented (ref: %s)", d.ref)
 }
 
@@ -28,7 +28,7 @@ type helmOCI struct {
 	opts Options
 }
 
-func (d *helmOCI) Write(_ context.Context, _ *bundle.RegistryV1) error {
+func (d *helmOCI) Write(_ context.Context, _ *registryv1.Bundle) error {
 	return fmt.Errorf("helm oci destination not yet implemented (ref: %s)", d.ref)
 }
 
@@ -37,7 +37,7 @@ type helmOCIArchive struct {
 	opts Options
 }
 
-func (d *helmOCIArchive) Write(_ context.Context, _ *bundle.RegistryV1) error {
+func (d *helmOCIArchive) Write(_ context.Context, _ *registryv1.Bundle) error {
 	return fmt.Errorf("helm oci-archive destination not yet implemented (ref: %s)", d.ref)
 }
 
@@ -46,7 +46,7 @@ type helmDir struct {
 	opts Options
 }
 
-func (d *helmDir) Write(_ context.Context, b *bundle.RegistryV1) error {
+func (d *helmDir) Write(_ context.Context, b *registryv1.Bundle) error {
 	ref := transport.ExpandPath(d.ref)
 	if _, err := os.Stat(ref); err == nil {
 		return fmt.Errorf("destination directory already exists: %s", ref)
@@ -81,7 +81,7 @@ type helmChartArchive struct {
 	opts Options
 }
 
-func (d *helmChartArchive) Write(_ context.Context, b *bundle.RegistryV1) error {
+func (d *helmChartArchive) Write(_ context.Context, b *registryv1.Bundle) error {
 	ref := transport.ExpandPath(d.ref)
 	if _, err := os.Stat(ref); err == nil {
 		return fmt.Errorf("destination already exists: %s", ref)

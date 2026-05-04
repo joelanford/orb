@@ -3,6 +3,7 @@ package convert
 import (
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,8 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 func defaultTestOpts() Options {
@@ -29,7 +28,7 @@ func defaultTestOpts() Options {
 func TestBundleCSVDeploymentGenerator(t *testing.T) {
 	tests := []struct {
 		name      string
-		rv1       *bundle.RegistryV1
+		rv1       *registryv1.Bundle
 		opts      Options
 		wantErr   bool
 		wantCount int
@@ -43,7 +42,7 @@ func TestBundleCSVDeploymentGenerator(t *testing.T) {
 		},
 		{
 			name: "single deployment",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				PackageName: "test-pkg",
 				CSV: v1alpha1.ClusterServiceVersion{
 					ObjectMeta: metav1.ObjectMeta{
@@ -103,7 +102,7 @@ func TestBundleCSVDeploymentGenerator(t *testing.T) {
 func TestBundleCSVPermissionsGenerator(t *testing.T) {
 	tests := []struct {
 		name    string
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		opts    Options
 		wantErr bool
 		wantNil bool
@@ -117,7 +116,7 @@ func TestBundleCSVPermissionsGenerator(t *testing.T) {
 		},
 		{
 			name: "single permission single namespace",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-csv"},
 					Spec: v1alpha1.ClusterServiceVersionSpec{
@@ -141,7 +140,7 @@ func TestBundleCSVPermissionsGenerator(t *testing.T) {
 		},
 		{
 			name: "AllNamespaces returns nil",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-csv"},
 					Spec: v1alpha1.ClusterServiceVersionSpec{
@@ -203,7 +202,7 @@ func TestBundleCSVPermissionsGenerator(t *testing.T) {
 func TestBundleCSVClusterPermissionsGenerator(t *testing.T) {
 	tests := []struct {
 		name    string
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		opts    Options
 		wantErr bool
 		wantLen int
@@ -216,7 +215,7 @@ func TestBundleCSVClusterPermissionsGenerator(t *testing.T) {
 		},
 		{
 			name: "single cluster permission",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-csv"},
 					Spec: v1alpha1.ClusterServiceVersionSpec{
@@ -240,7 +239,7 @@ func TestBundleCSVClusterPermissionsGenerator(t *testing.T) {
 		},
 		{
 			name: "AllNamespaces promotes permissions to cluster permissions",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-csv"},
 					Spec: v1alpha1.ClusterServiceVersionSpec{
@@ -316,7 +315,7 @@ func TestBundleCSVClusterPermissionsGenerator(t *testing.T) {
 func TestBundleCSVServiceAccountGenerator(t *testing.T) {
 	tests := []struct {
 		name    string
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		opts    Options
 		wantErr bool
 		wantLen int
@@ -329,7 +328,7 @@ func TestBundleCSVServiceAccountGenerator(t *testing.T) {
 		},
 		{
 			name: "named SA created",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{
 						InstallStrategy: v1alpha1.NamedInstallStrategy{
@@ -347,7 +346,7 @@ func TestBundleCSVServiceAccountGenerator(t *testing.T) {
 		},
 		{
 			name: "default SA skipped",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{
 						InstallStrategy: v1alpha1.NamedInstallStrategy{
@@ -388,7 +387,7 @@ func TestBundleCSVServiceAccountGenerator(t *testing.T) {
 func TestBundleCRDGenerator(t *testing.T) {
 	tests := []struct {
 		name    string
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		opts    Options
 		wantErr bool
 		wantLen int
@@ -401,7 +400,7 @@ func TestBundleCRDGenerator(t *testing.T) {
 		},
 		{
 			name: "simple CRD passthrough",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CRDs: []apiextensionsv1.CustomResourceDefinition{
 					{
 						ObjectMeta: metav1.ObjectMeta{Name: "foos.example.com"},
@@ -442,7 +441,7 @@ func TestBundleCRDGenerator(t *testing.T) {
 func TestBundleAdditionalResourcesGenerator(t *testing.T) {
 	tests := []struct {
 		name    string
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		opts    Options
 		wantErr bool
 		wantLen int
@@ -455,7 +454,7 @@ func TestBundleAdditionalResourcesGenerator(t *testing.T) {
 		},
 		{
 			name: "supported namespaced resource gets namespace",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				Others: []unstructured.Unstructured{
 					{
 						Object: map[string]interface{}{
@@ -494,7 +493,7 @@ func TestBundleAdditionalResourcesGenerator(t *testing.T) {
 func TestBundleValidatingWebhookResourceGenerator(t *testing.T) {
 	tests := []struct {
 		name    string
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		opts    Options
 		wantErr bool
 		wantLen int
@@ -507,7 +506,7 @@ func TestBundleValidatingWebhookResourceGenerator(t *testing.T) {
 		},
 		{
 			name: "validating webhook creates config",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{
 						WebhookDefinitions: []v1alpha1.WebhookDescription{
@@ -554,7 +553,7 @@ func TestBundleValidatingWebhookResourceGenerator(t *testing.T) {
 func TestBundleMutatingWebhookResourceGenerator(t *testing.T) {
 	tests := []struct {
 		name    string
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		opts    Options
 		wantErr bool
 		wantLen int
@@ -567,7 +566,7 @@ func TestBundleMutatingWebhookResourceGenerator(t *testing.T) {
 		},
 		{
 			name: "mutating webhook creates config",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{
 						WebhookDefinitions: []v1alpha1.WebhookDescription{
@@ -614,7 +613,7 @@ func TestBundleMutatingWebhookResourceGenerator(t *testing.T) {
 func TestBundleDeploymentServiceResourceGenerator(t *testing.T) {
 	tests := []struct {
 		name    string
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		opts    Options
 		wantErr bool
 		wantLen int
@@ -627,7 +626,7 @@ func TestBundleDeploymentServiceResourceGenerator(t *testing.T) {
 		},
 		{
 			name: "webhook deployment creates service",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{
 						WebhookDefinitions: []v1alpha1.WebhookDescription{
@@ -684,13 +683,13 @@ func TestBundleDeploymentServiceResourceGenerator(t *testing.T) {
 func TestCertProviderResourceGenerator(t *testing.T) {
 	tests := []struct {
 		name    string
-		rv1     *bundle.RegistryV1
+		rv1     *registryv1.Bundle
 		opts    Options
 		wantLen int
 	}{
 		{
 			name: "no webhooks returns empty",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{},
 				},
@@ -700,7 +699,7 @@ func TestCertProviderResourceGenerator(t *testing.T) {
 		},
 		{
 			name: "with webhooks and no provider returns empty",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{
 						WebhookDefinitions: []v1alpha1.WebhookDescription{
@@ -719,7 +718,7 @@ func TestCertProviderResourceGenerator(t *testing.T) {
 		},
 		{
 			name: "with webhooks and provider generates cert objects",
-			rv1: &bundle.RegistryV1{
+			rv1: &registryv1.Bundle{
 				CSV: v1alpha1.ClusterServiceVersion{
 					Spec: v1alpha1.ClusterServiceVersionSpec{
 						WebhookDefinitions: []v1alpha1.WebhookDescription{

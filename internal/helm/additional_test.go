@@ -4,18 +4,17 @@ import (
 	"strings"
 	"testing"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
-
-	"github.com/joelanford/orb/internal/bundle"
 )
 
 // renderAdditional generates a helm chart from the bundle, renders the
 // additional.yaml template with the given values, and parses each document
 // into an unstructured.Unstructured slice.
-func renderAdditional(t *testing.T, b *bundle.RegistryV1) []unstructured.Unstructured {
+func renderAdditional(t *testing.T, b *registryv1.Bundle) []unstructured.Unstructured {
 	t.Helper()
 
 	rendered, err := renderChart(t, b, map[string]any{"watchNamespace": ""})
@@ -46,7 +45,7 @@ func renderAdditional(t *testing.T, b *bundle.RegistryV1) []unstructured.Unstruc
 }
 
 func TestAdditional_NamespacedResource(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.Others = []unstructured.Unstructured{
 			{
 				Object: map[string]interface{}{
@@ -74,7 +73,7 @@ func TestAdditional_NamespacedResource(t *testing.T) {
 }
 
 func TestAdditional_UnsupportedKind(t *testing.T) {
-	b := makeMinimalBundle(func(b *bundle.RegistryV1) {
+	b := makeMinimalBundle(func(b *registryv1.Bundle) {
 		b.Others = []unstructured.Unstructured{
 			{
 				Object: map[string]interface{}{

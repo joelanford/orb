@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	registryv1 "github.com/joelanford/library-olm/bundle/registry/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/yaml"
 
-	"github.com/joelanford/orb/internal/bundle"
 	"github.com/joelanford/orb/internal/convert"
 )
 
-func generateRBAC(b *bundle.RegistryV1) ([]byte, error) {
+func generateRBAC(b *registryv1.Bundle) ([]byte, error) {
 	var sb strings.Builder
 
 	// 1. ClusterPermissions — always ClusterRole/ClusterRoleBinding (unconditional)
