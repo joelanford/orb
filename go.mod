@@ -11,8 +11,8 @@ require (
 	github.com/muesli/termenv v0.16.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/operator-framework/api v0.41.0
-	github.com/operator-framework/operator-registry v1.64.0
+	github.com/operator-framework/api v0.42.0
+	github.com/operator-framework/operator-registry v1.65.0
 	github.com/samber/lo v1.38.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
@@ -24,12 +24,12 @@ require (
 	golang.org/x/term v0.42.0
 	helm.sh/helm/v4 v4.1.3
 	k8s.io/api v0.35.4
-	k8s.io/apiextensions-apiserver v0.35.2
+	k8s.io/apiextensions-apiserver v0.35.3
 	k8s.io/apimachinery v0.35.4
 	k8s.io/client-go v0.35.4
 	k8s.io/klog/v2 v2.140.0
 	modernc.org/sqlite v1.50.0
-	sigs.k8s.io/controller-runtime v0.23.1
+	sigs.k8s.io/controller-runtime v0.23.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -217,7 +217,7 @@ require (
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
-	github.com/docker/cli v29.2.1+incompatible // indirect
+	github.com/docker/cli v29.3.1+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.5 // indirect
@@ -346,7 +346,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
-	github.com/ianlancetaylor/demangle v0.0.0-20240805132620-81f5be970eca // indirect
+	github.com/ianlancetaylor/demangle v0.0.0-20250417193237-f615e6bd150b // indirect
 	github.com/in-toto/attestation v1.1.2 // indirect
 	github.com/in-toto/in-toto-golang v0.9.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -593,9 +593,9 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.7.0 // indirect
-	k8s.io/apiserver v0.35.2 // indirect
+	k8s.io/apiserver v0.35.3 // indirect
 	k8s.io/cli-runtime v0.35.1 // indirect
-	k8s.io/component-base v0.35.2 // indirect
+	k8s.io/component-base v0.35.3 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/kubectl v0.35.1 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
