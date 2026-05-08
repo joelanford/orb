@@ -15,7 +15,7 @@
 |---|---|
 | operator-framework/api | OLM API types (bundles, packages, channels) |
 | operator-framework/operator-registry | FBC (file-based catalog) parsing and declcfg types |
-| joelanford/library-olm | OCI image handling, caching, bundle/catalog handlers, plain manifest conversion, validation, cert providers |
+| joelanford/library-olm | OCI image handling, caching, bundle/catalog handlers, plain manifest conversion, validation, cert providers, catalog store (catalog/v1), FBC import with extension hooks (catalog/fbc), bundle resolution (resolver/v1) |
 | containers/image (go.podman.io/image/v5) | OCI image transport and registry interaction |
 | helm.sh/helm/v4 | Helm chart generation, packaging, and plugin SDK |
 | Masterminds/semver/v3, blang/semver/v4 | Semver parsing and constraint matching |
@@ -36,8 +36,7 @@
 cmd/orb/main.go          # Entry point
 internal/
   cmd/                   # Cobra command definitions
-  bundle/                # Version-release types, vendored operator-registry types
-  catalog/               # Catalog DB (SQLite), FBC parsing, resolution
+  catalog/               # Catalog store (library-olm wrapper), FBC extension for display metadata
   convert/               # Naming and hashing utilities (used by helm)
   destination/           # Output targets (plain manifests, Helm charts)
   helm/                  # Helm chart generation and packaging

@@ -5,7 +5,7 @@
 - [ ] `fbc.NewImporter(os.DirFS(tmpDir), fbc.WithOLMPackageExtension(ext))` is used for FBC content import
 - [ ] `fbc.PartialImportError` is handled (partial imports commit successfully)
 - [ ] Parallel catalog update (`errgroup` with worker limit) works with library-olm's Store
-- [ ] Old schema migration detects `catalogs` table, copies metadata, drops old tables
+- [ ] No old schema migration — clean break (v0 unstable); incompatible old databases produce a clear error on `OpenStore`
 
 ## Display metadata via FBC extension
 - [ ] `OLMPackageExtension` implementation extracts displayName, description, keywords, icon from FBC package and bundle blobs

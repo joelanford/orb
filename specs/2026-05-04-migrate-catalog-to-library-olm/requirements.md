@@ -11,7 +11,7 @@
 - Properties participate in content schema version rebuild — no separate migration logic needed
 - `orb catalog search` keyword matching reads `orb.keywords`, `orb.displayName`, `orb.description` properties
 - `orb catalog info` reads display metadata from `UpdateGraph.Property()` and `Bundle.Property()`
-- Old orb databases (with `catalogs` and `packages` tables) are migrated on first open
+- No migration from old orb databases — orb is v0 (unstable), so a clean break is intentional; users delete the old database and re-add catalogs
 - Replace `internal/catalog/resolve.go` with calls to `resolverv1.Resolve()` from library-olm's `resolver/v1` package
 - Use `store.Select(labels.Selector)` for catalog label filtering instead of manual matching in resolve
 - Map `--channel` values to graph paths via `resolverv1.WithGraphs()`
