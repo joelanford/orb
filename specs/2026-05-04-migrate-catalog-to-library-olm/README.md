@@ -1,5 +1,6 @@
 ---
-status: in-progress
+status: done
+pr: https://github.com/joelanford/orb/pull/37
 ---
 # Migrate catalog layer to library-olm
 
@@ -23,7 +24,7 @@ Orb's `catalog.DB` is replaced by library-olm's `catalogv1.Store`. The `catalogv
 
 FBC import uses `fbc.NewImporter(fs.FS, fbc.WithOLMPackageExtension(ext))` passed to `store.Set(ctx, name, WithContent(importer, digest))`. The importer handles FBC parsing, normalization, version extraction, channel/bundle/entry construction, and display metadata extraction via the extension.
 
-Old schema migration runs on first open when legacy `catalogs`/`packages` tables are detected.
+No migration from old orb databases is provided. Orb is still v0 (unstable), so we intentionally make a clean break — users re-run `orb catalog add` to repopulate. library-olm's `OpenStore` will create a fresh schema on first open; if an old database exists at the same path, `OpenStore` will detect the incompatible schema and return an error, at which point users should delete the old database file and start fresh.
 
 ### Display metadata via FBC extension
 
