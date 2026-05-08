@@ -6,15 +6,6 @@ import (
 	"path/filepath"
 )
 
-// Catalog represents a single catalog entry.
-type Catalog struct {
-	Name     string            `json:"name"`
-	Ref      string            `json:"ref"`
-	Digest   string            `json:"digest"`
-	Priority int               `json:"priority"`
-	Labels   map[string]string `json:"labels,omitempty"`
-}
-
 // DefaultDBPath returns the default path for the catalog database.
 // If ORB_DATA_DIR is set, the database is stored there; otherwise
 // it falls back to <UserConfigDir>/orb.

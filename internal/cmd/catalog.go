@@ -2,20 +2,27 @@ package cmd
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	mmsemver "github.com/Masterminds/semver/v3"
+	bsemver "github.com/blang/semver/v4"
+	bundlev1 "github.com/joelanford/library-olm/bundle/v1"
+	"github.com/joelanford/library-olm/catalog/fbc"
+	catalogv1 "github.com/joelanford/library-olm/catalog/v1"
 	"github.com/joelanford/library-olm/image"
 	imagecatalog "github.com/joelanford/library-olm/image/catalog"
-	"github.com/opencontainers/go-digest"
+	resolverv1 "github.com/joelanford/library-olm/resolver/v1"
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/cobra"
 	"github.com/vbauerster/mpb/v8"
@@ -24,6 +31,7 @@ import (
 	"go.podman.io/image/v5/types"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/term"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/util/jsonpath"
 	"sigs.k8s.io/yaml"
 
@@ -49,6 +57,18 @@ func newCatalogCmd() *cobra.Command {
 	cmd.AddCommand(newCatalogUpdateCmd())
 
 	return cmd
+}
+
+func openStore() (catalogv1.Store, error) {
+	path, err := catalog.DefaultDBPath()
+	if err != nil {
+		return nil, err
+	}
+	return catalogv1.OpenStore(path)
+}
+
+func newFBCImporter(fsys fs.FS) *fbc.Importer {
+	return fbc.NewImporter(fsys, fbc.WithOLMPackageExtension(catalog.DisplayMetadataExtension{}))
 }
 
 type catalogAddOptions struct {
@@ -114,35 +134,40 @@ Examples:
 }
 
 func runCatalogEdit(cmd *cobra.Command, name string, opts *catalogEditOptions) error {
-	db, err := catalog.OpenDefaultDB()
+	store, err := openStore()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer store.Close()
 
-	err = db.UpdateCatalog(name, func(cat *catalog.Catalog) {
-		if cmd.Flags().Changed("priority") {
-			cat.Priority = opts.priority
-		}
-
-		if cmd.Flags().Changed("label") {
-			if cat.Labels == nil {
-				cat.Labels = make(map[string]string)
-			}
-			for k, v := range opts.labels {
-				cat.Labels[k] = v
-			}
-		}
-
-		for _, k := range opts.removeLabels {
-			delete(cat.Labels, k)
-		}
-		if len(cat.Labels) == 0 {
-			cat.Labels = nil
-		}
-	})
+	cat, err := store.Get(name)
 	if err != nil {
 		return err
+	}
+
+	var setOpts []catalogv1.SetOption
+	if cmd.Flags().Changed("priority") {
+		setOpts = append(setOpts, catalogv1.WithPriority(opts.priority))
+	}
+
+	if cmd.Flags().Changed("label") || len(opts.removeLabels) > 0 {
+		newLabels := cat.Labels()
+		if newLabels == nil {
+			newLabels = make(map[string]string)
+		}
+		for k, v := range opts.labels {
+			newLabels[k] = v
+		}
+		for _, k := range opts.removeLabels {
+			delete(newLabels, k)
+		}
+		setOpts = append(setOpts, catalogv1.WithLabels(newLabels))
+	}
+
+	if len(setOpts) > 0 {
+		if _, err := store.Set(cmd.Context(), name, setOpts...); err != nil {
+			return err
+		}
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Edited catalog %q\n", name)
@@ -177,60 +202,98 @@ Examples:
 }
 
 func runCatalogInfo(cmd *cobra.Command, packageName string, opts *catalogInfoOptions) error {
-	db, err := catalog.OpenDefaultDB()
+	ctx := cmd.Context()
+
+	store, err := openStore()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer store.Close()
 
-	catalogs, err := db.SortedCatalogs()
+	catalogs, err := sortedCatalogs(store)
 	if err != nil {
 		return err
 	}
 
 	for _, cat := range catalogs {
-		pd, err := db.GetPackageData(cat.Name, packageName)
+		pkg, err := cat.GetPackage(ctx, packageName)
 		if err != nil {
-			return err
-		}
-		if pd == nil {
 			continue
 		}
 
 		out := cmd.OutOrStdout()
 
-		// Render icon if available and not suppressed.
-		if !opts.noIcon && pd.Icon != nil && len(pd.Icon.Data) > 0 {
-			if f, ok := out.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
-				if err := termimage.Render(out, pd.Icon.Data, pd.Icon.MediaType, 80); err == nil {
-					fmt.Fprintln(out)
+		if !opts.noIcon {
+			if iconJSON, err := pkg.Property(ctx, catalog.PropertyIcon); err == nil && iconJSON != nil {
+				var icon catalog.IconValue
+				if json.Unmarshal(iconJSON, &icon) == nil && len(icon.Data) > 0 {
+					if f, ok := out.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+						if err := termimage.Render(out, icon.Data, icon.MediaType, 80); err == nil {
+							fmt.Fprintln(out)
+						}
+					}
 				}
 			}
 		}
 
 		bold := lipgloss.NewStyle().Bold(true)
 		fmt.Fprintf(out, "%s %s\n", bold.Render("Package:"), packageName)
-		if pd.DisplayName != "" {
-			fmt.Fprintf(out, "%s %s\n", bold.Render("Display Name:"), pd.DisplayName)
-		}
-		fmt.Fprintf(out, "%s %s\n", bold.Render("Catalog:"), cat.Name)
-		if pd.Description != "" {
-			fmt.Fprintf(out, "%s %s\n", bold.Render("Description:"), pd.Description)
-		}
-		if len(pd.Keywords) > 0 {
-			fmt.Fprintf(out, "%s %s\n", bold.Render("Keywords:"), strings.Join(pd.Keywords, ", "))
-		}
-		if len(pd.Channels) > 0 {
-			channelNames := make([]string, len(pd.Channels))
-			for i, ch := range pd.Channels {
-				channelNames[i] = ch.Name
+
+		if val, err := pkg.Property(ctx, catalog.PropertyDisplayName); err == nil && val != nil {
+			var displayName string
+			if json.Unmarshal(val, &displayName) == nil && displayName != "" {
+				fmt.Fprintf(out, "%s %s\n", bold.Render("Display Name:"), displayName)
 			}
-			fmt.Fprintf(out, "%s %s\n", bold.Render("Channels:"), strings.Join(channelNames, ", "))
 		}
-		if len(pd.Bundles) > 0 {
-			latest := slices.MaxFunc(pd.Bundles, catalog.CompareBundleData)
-			fmt.Fprintf(out, "%s %d (latest: %s)\n", bold.Render("Versions:"), len(pd.Bundles), latest.VersionRelease)
+
+		fmt.Fprintf(out, "%s %s\n", bold.Render("Catalog:"), cat.Name())
+
+		if val, err := pkg.Property(ctx, catalog.PropertyDescription); err == nil && val != nil {
+			var description string
+			if json.Unmarshal(val, &description) == nil && description != "" {
+				fmt.Fprintf(out, "%s %s\n", bold.Render("Description:"), description)
+			}
 		}
+
+		if val, err := pkg.Property(ctx, catalog.PropertyKeywords); err == nil && val != nil {
+			var keywords []string
+			if json.Unmarshal(val, &keywords) == nil && len(keywords) > 0 {
+				fmt.Fprintf(out, "%s %s\n", bold.Render("Keywords:"), strings.Join(keywords, ", "))
+			}
+		}
+
+		composite, ok := pkg.(catalogv1.CompositeUpdateGraph)
+		if ok {
+			var channelNames []string
+			for ch, err := range composite.ListGraphs(ctx) {
+				if err != nil {
+					return err
+				}
+				channelNames = append(channelNames, ch.Name())
+			}
+			if len(channelNames) > 0 {
+				slices.Sort(channelNames)
+				fmt.Fprintf(out, "%s %s\n", bold.Render("Channels:"), strings.Join(channelNames, ", "))
+			}
+		}
+
+		var bundleCount int
+		var highest bundlev1.Bundle
+		for b, err := range pkg.ListBundles(ctx) {
+			if err != nil {
+				return err
+			}
+			bundleCount++
+			if highest == nil || b.NameVersionRelease().VersionRelease().Compare(highest.NameVersionRelease().VersionRelease()) > 0 {
+				highest = b
+			}
+		}
+		if bundleCount > 0 {
+			nvr := highest.NameVersionRelease()
+			vr := nvr.VersionRelease()
+			fmt.Fprintf(out, "%s %d (latest: %s)\n", bold.Render("Versions:"), bundleCount, formatVersionRelease(vr))
+		}
+
 		return nil
 	}
 
@@ -276,11 +339,18 @@ Examples:
 }
 
 func runCatalogSearch(cmd *cobra.Command, keyword string, opts *catalogSearchOptions) error {
-	db, err := catalog.OpenDefaultDB()
+	ctx := cmd.Context()
+
+	store, err := openStore()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer store.Close()
+
+	catalogs, err := sortedCatalogs(store)
+	if err != nil {
+		return err
+	}
 
 	type searchResult struct {
 		catalogName string
@@ -293,26 +363,41 @@ func runCatalogSearch(cmd *cobra.Command, keyword string, opts *catalogSearchOpt
 	var results []searchResult
 	lowerKeyword := strings.ToLower(keyword)
 
-	err = db.SearchPackageData(func(catalogName, packageName string, pd *catalog.PackageData) bool {
-		if keyword != "" && !matchesKeyword(lowerKeyword, packageName, pd) {
-			return true
-		}
+	for _, cat := range catalogs {
+		for pkg, err := range cat.ListPackages(ctx) {
+			if err != nil {
+				return err
+			}
 
-		_, shadowed := seen[packageName]
-		seen[packageName] = struct{}{}
-		if shadowed && !opts.includeShadowed {
-			return true
+			var displayName, description string
+			var keywords []string
+
+			if val, err := pkg.Property(ctx, catalog.PropertyDisplayName); err == nil && val != nil {
+				_ = json.Unmarshal(val, &displayName)
+			}
+			if val, err := pkg.Property(ctx, catalog.PropertyDescription); err == nil && val != nil {
+				_ = json.Unmarshal(val, &description)
+			}
+			if val, err := pkg.Property(ctx, catalog.PropertyKeywords); err == nil && val != nil {
+				_ = json.Unmarshal(val, &keywords)
+			}
+
+			if keyword != "" && !matchesKeyword(lowerKeyword, pkg.Name(), displayName, description, keywords) {
+				continue
+			}
+
+			_, shadowed := seen[pkg.Name()]
+			seen[pkg.Name()] = struct{}{}
+			if shadowed && !opts.includeShadowed {
+				continue
+			}
+			results = append(results, searchResult{
+				catalogName: cat.Name(),
+				packageName: pkg.Name(),
+				displayName: displayName,
+				shadowed:    shadowed,
+			})
 		}
-		results = append(results, searchResult{
-			catalogName: catalogName,
-			packageName: packageName,
-			displayName: pd.DisplayName,
-			shadowed:    shadowed,
-		})
-		return true
-	})
-	if err != nil {
-		return err
 	}
 
 	slices.SortStableFunc(results, func(a, b searchResult) int {
@@ -367,17 +452,17 @@ func runCatalogSearch(cmd *cobra.Command, keyword string, opts *catalogSearchOpt
 	return nil
 }
 
-func matchesKeyword(lowerKeyword string, packageName string, pd *catalog.PackageData) bool {
+func matchesKeyword(lowerKeyword, packageName, displayName, description string, keywords []string) bool {
 	if strings.Contains(strings.ToLower(packageName), lowerKeyword) {
 		return true
 	}
-	if strings.Contains(strings.ToLower(pd.DisplayName), lowerKeyword) {
+	if strings.Contains(strings.ToLower(displayName), lowerKeyword) {
 		return true
 	}
-	if strings.Contains(strings.ToLower(pd.Description), lowerKeyword) {
+	if strings.Contains(strings.ToLower(description), lowerKeyword) {
 		return true
 	}
-	for _, kw := range pd.Keywords {
+	for _, kw := range keywords {
 		if strings.Contains(strings.ToLower(kw), lowerKeyword) {
 			return true
 		}
@@ -397,13 +482,13 @@ func newCatalogListCmd() *cobra.Command {
 }
 
 func runCatalogList(cmd *cobra.Command) error {
-	db, err := catalog.OpenDefaultDB()
+	store, err := openStore()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer store.Close()
 
-	catalogs, err := db.SortedCatalogs()
+	catalogs, err := sortedCatalogs(store)
 	if err != nil {
 		return err
 	}
@@ -415,7 +500,7 @@ func runCatalogList(cmd *cobra.Command) error {
 
 	var rows [][]string
 	for _, cat := range catalogs {
-		rows = append(rows, []string{cat.Name, cat.Ref, fmt.Sprintf("%d", cat.Priority)})
+		rows = append(rows, []string{cat.Name(), cat.URI(), fmt.Sprintf("%d", cat.Priority())})
 	}
 	t := table.New().
 		Headers("NAME", "REF", "PRIORITY").
@@ -484,15 +569,13 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 		return fmt.Errorf("only docker:// transport is supported for catalogs")
 	}
 
-	db, err := catalog.OpenDefaultDB()
+	store, err := openStore()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer store.Close()
 
-	if cat, err := db.GetCatalog(name); err != nil {
-		return err
-	} else if cat != nil {
+	if _, err := store.Get(name); err == nil {
 		return fmt.Errorf("catalog %q already exists", name)
 	}
 
@@ -543,23 +626,22 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 	bar.SetTotal(total, true)
 	p.Wait()
 
-	pkgData, err := catalog.BuildPackageData(ctx, os.DirFS(tmpDir))
-	if err != nil {
-		return fmt.Errorf("building package data: %w", err)
+	importer := newFBCImporter(os.DirFS(tmpDir))
+	setOpts := []catalogv1.SetOption{
+		catalogv1.WithURI(ref),
+		catalogv1.WithPriority(opts.priority),
+		catalogv1.WithContent(importer, desc.Digest.String()),
+	}
+	if opts.labels != nil {
+		setOpts = append(setOpts, catalogv1.WithLabels(opts.labels))
 	}
 
-	if err := db.AddCatalog(catalog.Catalog{
-		Name:     name,
-		Ref:      ref,
-		Digest:   desc.Digest.String(),
-		Priority: opts.priority,
-		Labels:   opts.labels,
-	}); err != nil {
-		return err
-	}
-
-	if err := db.SetPackageData(name, pkgData); err != nil {
-		return err
+	if _, err := store.Set(ctx, name, setOpts...); err != nil {
+		var partial catalogv1.PartialImportError
+		if !errors.As(err, &partial) {
+			return err
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: partial import for catalog %q: %v\n", name, err)
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Added catalog %q (%s)\n", name, desc.Digest)
@@ -567,13 +649,13 @@ func runCatalogAdd(cmd *cobra.Command, name, ref string, opts *catalogAddOptions
 }
 
 func runCatalogRemove(cmd *cobra.Command, name string) error {
-	db, err := catalog.OpenDefaultDB()
+	store, err := openStore()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer store.Close()
 
-	if _, err := db.RemoveCatalog(name); err != nil {
+	if err := store.Delete(name); err != nil {
 		return err
 	}
 
@@ -584,24 +666,21 @@ func runCatalogRemove(cmd *cobra.Command, name string) error {
 func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOptions) error {
 	ctx := cmd.Context()
 
-	db, err := catalog.OpenDefaultDB()
+	store, err := openStore()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer store.Close()
 
-	var toUpdate []catalog.Catalog
+	var toUpdate []catalogv1.Catalog
 	if name != "" {
-		cat, err := db.GetCatalog(name)
+		cat, err := store.Get(name)
 		if err != nil {
 			return err
 		}
-		if cat == nil {
-			return fmt.Errorf("catalog %q not found", name)
-		}
-		toUpdate = []catalog.Catalog{*cat}
+		toUpdate = []catalogv1.Catalog{cat}
 	} else {
-		catalogs, err := db.SortedCatalogs()
+		catalogs, err := store.List()
 		if err != nil {
 			return err
 		}
@@ -610,13 +689,14 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 
 	const numWorkers = 3
 
-	// ── Phase 1: Resolve refs and check freshness ──────────────────────
 	type resolvedCatalog struct {
-		name      string
-		newDigest digest.Digest
-		upToDate  bool
-		repo      *orbimage.Repository
-		err       error
+		name     string
+		uri      string
+		digest   string
+		upToDate bool
+		repo     *orbimage.Repository
+		err      error
+		warning  string
 	}
 
 	resolved := make([]resolvedCatalog, len(toUpdate))
@@ -626,30 +706,31 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 	for idx, cat := range toUpdate {
 		resolveGroup.Go(func() error {
 			res := &resolved[idx]
-			res.name = cat.Name
+			res.name = cat.Name()
+			res.uri = cat.URI()
 
-			tRef, err := transport.ParseRef(cat.Ref)
+			tRef, err := transport.ParseRef(cat.URI())
 			if err != nil {
-				res.err = fmt.Errorf("catalog %q: %w", cat.Name, err)
+				res.err = fmt.Errorf("catalog %q: %w", cat.Name(), err)
 				return nil
 			}
 
 			repo, err := newDockerRepo(resolveCtx, tRef.Ref)
 			if err != nil {
-				res.err = fmt.Errorf("catalog %q: %w", cat.Name, err)
+				res.err = fmt.Errorf("catalog %q: %w", cat.Name(), err)
 				return nil
 			}
 
 			desc, err := repo.Resolve(resolveCtx)
 			if err != nil {
 				repo.Close()
-				res.err = fmt.Errorf("catalog %q: resolving image: %w", cat.Name, err)
+				res.err = fmt.Errorf("catalog %q: resolving image: %w", cat.Name(), err)
 				return nil
 			}
 
-			res.newDigest = desc.Digest
+			res.digest = desc.Digest.String()
 
-			if !opts.force && desc.Digest.String() == cat.Digest {
+			if !opts.force && desc.Digest.String() == cat.Digest() {
 				res.upToDate = true
 				repo.Close()
 				return nil
@@ -668,10 +749,8 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 		return err
 	}
 
-	// ── Phase 2: Download out-of-date catalogs ─────────────────────────
 	p := mpb.New(mpb.WithOutput(cmd.ErrOrStderr()))
 
-	// Create all progress bars upfront so they render together.
 	type downloadTarget struct {
 		idx int
 		bar *mpb.Bar
@@ -733,26 +812,17 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 				return nil
 			}
 
-			pkgData, err := catalog.BuildPackageData(unpackCtx, os.DirFS(tmpDir))
-			if err != nil {
-				res.err = fmt.Errorf("catalog %q: building package data: %w", res.name, err)
-				bar.Abort(true)
-				return nil
-			}
-
-			newDigest := res.newDigest.String()
-			if err := db.UpdateCatalog(res.name, func(cat *catalog.Catalog) {
-				cat.Digest = newDigest
-			}); err != nil {
-				res.err = fmt.Errorf("catalog %q: updating catalog: %w", res.name, err)
-				bar.Abort(true)
-				return nil
-			}
-
-			if err := db.SetPackageData(res.name, pkgData); err != nil {
-				res.err = fmt.Errorf("catalog %q: saving package data: %w", res.name, err)
-				bar.Abort(true)
-				return nil
+			importer := newFBCImporter(os.DirFS(tmpDir))
+			if _, err := store.Set(unpackCtx, res.name,
+				catalogv1.WithContent(importer, res.digest),
+			); err != nil {
+				var partial catalogv1.PartialImportError
+				if !errors.As(err, &partial) {
+					res.err = fmt.Errorf("catalog %q: importing content: %w", res.name, err)
+					bar.Abort(true)
+					return nil
+				}
+				res.warning = fmt.Sprintf("catalog %q: partial import: %v", res.name, err)
 			}
 
 			bar.SetTotal(total, true)
@@ -765,7 +835,6 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 	}
 	p.Wait()
 
-	// ── Phase 3: Report results ────────────────────────────────────────
 	var allErrors []error
 	for i := range resolved {
 		res := &resolved[i]
@@ -781,9 +850,12 @@ func runCatalogUpdate(cmd *cobra.Command, name string, opts *catalogUpdateOption
 			continue
 		}
 		if res.upToDate {
-			fmt.Fprintf(out, "Catalog %q is up-to-date (%s)\n", res.name, res.newDigest)
+			fmt.Fprintf(out, "Catalog %q is up-to-date (%s)\n", res.name, res.digest)
 		} else {
-			fmt.Fprintf(out, "Catalog %q updated (%s)\n", res.name, res.newDigest)
+			fmt.Fprintf(out, "Catalog %q updated (%s)\n", res.name, res.digest)
+		}
+		if res.warning != "" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", res.warning)
 		}
 	}
 
@@ -841,41 +913,100 @@ Examples:
 }
 
 func runCatalogResolve(cmd *cobra.Command, packageName string, opts *catalogResolveOptions) error {
-	db, err := catalog.OpenDefaultDB()
+	ctx := cmd.Context()
+
+	store, err := openStore()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer store.Close()
 
-	resolveOpts := catalog.ResolveOptions{
-		CatalogLabelSelector: opts.catalogLabelSelector,
-		Channels:             opts.channels,
-		Version:              opts.version,
+	var reader catalogv1.StoreReader = store
+	if opts.catalogLabelSelector != "" {
+		selector, err := labels.Parse(opts.catalogLabelSelector)
+		if err != nil {
+			return fmt.Errorf("parsing catalog label selector: %w", err)
+		}
+		reader = store.Select(selector)
+	}
+
+	var resolveOpts []resolverv1.ResolveOption
+
+	if len(opts.channels) > 0 {
+		paths := make([][]string, len(opts.channels))
+		for i, ch := range opts.channels {
+			paths[i] = []string{ch}
+		}
+		resolveOpts = append(resolveOpts, resolverv1.WithGraphs(paths))
+	}
+
+	if opts.version != "" {
+		constraint, err := mmsemver.NewConstraint(opts.version)
+		if err != nil {
+			return fmt.Errorf("parsing version constraint: %w", err)
+		}
+		resolveOpts = append(resolveOpts, resolverv1.WithMastermindsVersionConstraint(*constraint))
 	}
 
 	if opts.installed != "" {
-		name, version, ok := strings.Cut(opts.installed, "=")
+		bundleID, versionStr, ok := strings.Cut(opts.installed, "=")
 		if !ok {
 			return fmt.Errorf("invalid --installed value %q: expected format name=version", opts.installed)
 		}
-		resolveOpts.InstalledName = name
-		resolveOpts.InstalledVersion = version
+		v, err := bsemver.Parse(versionStr)
+		if err != nil {
+			return fmt.Errorf("parsing installed version %q: %w", versionStr, err)
+		}
+		identity := installedBundleIdentity{
+			id:  bundlev1.BundleID(bundleID),
+			nvr: bundlev1.NameVersionRelease{Version: v},
+		}
+		resolveOpts = append(resolveOpts, resolverv1.WithSuccessorsOf(identity))
 	}
 
-	results, err := catalog.Resolve(db, packageName, resolveOpts)
+	cat, bundles, err := resolverv1.Resolve(ctx, reader, packageName, resolveOpts...)
 	if err != nil {
 		return err
 	}
+	if cat == nil {
+		return fmt.Errorf("package %q not found in any catalog", packageName)
+	}
 
-	return printResolveResults(cmd.OutOrStdout(), results, opts.output)
+	return printResolveResults(cmd.OutOrStdout(), cat, bundles, opts.output)
+}
+
+type installedBundleIdentity struct {
+	id  bundlev1.BundleID
+	nvr bundlev1.NameVersionRelease
+}
+
+func (i installedBundleIdentity) ID() bundlev1.BundleID                           { return i.id }
+func (i installedBundleIdentity) NameVersionRelease() bundlev1.NameVersionRelease { return i.nvr }
+
+type resolveResultItem struct {
+	Catalog string `json:"catalog"`
+	Bundle  string `json:"bundle"`
+	Version string `json:"version"`
+	Image   string `json:"image"`
 }
 
 type resolveOutput struct {
-	Items []catalog.ResolveResult `json:"items"`
+	Items []resolveResultItem `json:"items"`
 }
 
-func printResolveResults(out io.Writer, results []catalog.ResolveResult, format string) error {
-	output := resolveOutput{Items: results}
+func printResolveResults(out io.Writer, cat catalogv1.Catalog, bundles []bundlev1.Bundle, format string) error {
+	items := make([]resolveResultItem, len(bundles))
+	for i, b := range bundles {
+		nvr := b.NameVersionRelease()
+		items[i] = resolveResultItem{
+			Catalog: cat.Name(),
+			Bundle:  string(b.ID()),
+			Version: formatVersionRelease(nvr.VersionRelease()),
+			Image:   b.URI(),
+		}
+	}
+	output := resolveOutput{Items: items}
+
 	switch {
 	case format == "json":
 		enc := json.NewEncoder(out)
@@ -894,8 +1025,6 @@ func printResolveResults(out io.Writer, results []catalog.ResolveResult, format 
 		if err := jp.Parse(template); err != nil {
 			return fmt.Errorf("parsing jsonpath template: %w", err)
 		}
-		// Convert through JSON so the jsonpath library sees
-		// map[string]interface{} values it can traverse.
 		raw, err := json.Marshal(output)
 		if err != nil {
 			return err
@@ -912,8 +1041,8 @@ func printResolveResults(out io.Writer, results []catalog.ResolveResult, format 
 		return err
 	case format == "":
 		var rows [][]string
-		for _, r := range results {
-			rows = append(rows, []string{r.CatalogName, r.String(), r.Image})
+		for _, item := range items {
+			rows = append(rows, []string{item.Catalog, item.Version, item.Image})
 		}
 		t := table.New().
 			Headers("CATALOG", "VERSION", "IMAGE").
@@ -932,6 +1061,27 @@ func printResolveResults(out io.Writer, results []catalog.ResolveResult, format 
 	default:
 		return fmt.Errorf("unsupported output format %q: use json, yaml, or jsonpath=TEMPLATE", format)
 	}
+}
+
+func formatVersionRelease(vr bundlev1.VersionRelease) string {
+	if vr.Release.IsEmpty() {
+		return vr.Version.String()
+	}
+	return fmt.Sprintf("%s_%s", vr.Version, vr.Release)
+}
+
+func sortedCatalogs(store catalogv1.Store) ([]catalogv1.Catalog, error) {
+	catalogs, err := store.List()
+	if err != nil {
+		return nil, err
+	}
+	slices.SortFunc(catalogs, func(a, b catalogv1.Catalog) int {
+		if c := cmp.Compare(b.Priority(), a.Priority()); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Name(), b.Name())
+	})
+	return catalogs, nil
 }
 
 func newDockerRepo(ctx context.Context, ref string) (*orbimage.Repository, error) {
