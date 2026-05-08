@@ -9,15 +9,20 @@ import (
 	"path/filepath"
 	"strings"
 
+	mmsemver "github.com/Masterminds/semver/v3"
+	bsemver "github.com/blang/semver/v4"
+	bundlev1 "github.com/joelanford/library-olm/bundle/v1"
+	catalogv1 "github.com/joelanford/library-olm/catalog/v1"
+	resolverv1 "github.com/joelanford/library-olm/resolver/v1"
 	"github.com/spf13/cobra"
 	"helm.sh/helm/v4/pkg/action"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/release"
+	"k8s.io/apimachinery/pkg/labels"
 
 	helmplugins "github.com/joelanford/orb/helm-plugins"
-	"github.com/joelanford/orb/internal/catalog"
 	"github.com/joelanford/orb/internal/helm"
 	"github.com/joelanford/orb/internal/source"
 	"github.com/joelanford/orb/internal/transport"
@@ -312,36 +317,63 @@ func runHelmPluginOrbGetter(cmd *cobra.Command, rawURL string) error {
 	}
 
 	// 3. Resolve from catalog.
-	db, err := catalog.OpenDefaultDB()
+	store, err := openStore()
 	if err != nil {
 		return fmt.Errorf("opening catalog database: %w", err)
 	}
-	defer db.Close()
+	defer store.Close()
 
-	resolveOpts := catalog.ResolveOptions{
-		Version:              oURL.Version,
-		Channels:             oURL.Channels,
-		CatalogLabelSelector: oURL.CatalogLabelSelector,
-		InstalledName:        installedName,
-		InstalledVersion:     installedVersion,
+	var resolveOpts []resolverv1.ResolveOption
+	var reader catalogv1.StoreReader = store
+
+	if oURL.CatalogLabelSelector != "" {
+		selector, err := labels.Parse(oURL.CatalogLabelSelector)
+		if err != nil {
+			return fmt.Errorf("parsing catalog label selector: %w", err)
+		}
+		reader = store.Select(selector)
 	}
-	fmt.Fprintf(cmd.ErrOrStderr(), "orb: resolving package %q (version=%q, channels=%v, catalogLabelSelector=%q, installedName=%q, installedVersion=%q)\n",
-		oURL.PackageName, resolveOpts.Version, resolveOpts.Channels, resolveOpts.CatalogLabelSelector, resolveOpts.InstalledName, resolveOpts.InstalledVersion)
+	if len(oURL.Channels) > 0 {
+		paths := make([][]string, len(oURL.Channels))
+		for i, ch := range oURL.Channels {
+			paths[i] = []string{ch}
+		}
+		resolveOpts = append(resolveOpts, resolverv1.WithGraphs(paths))
+	}
+	if oURL.Version != "" {
+		constraint, err := mmsemver.NewConstraint(oURL.Version)
+		if err != nil {
+			return fmt.Errorf("parsing version constraint: %w", err)
+		}
+		resolveOpts = append(resolveOpts, resolverv1.WithMastermindsVersionConstraint(*constraint))
+	}
+	if installedName != "" && installedVersion != "" {
+		v, err := bsemver.Parse(installedVersion)
+		if err != nil {
+			return fmt.Errorf("parsing installed version %q: %w", installedVersion, err)
+		}
+		resolveOpts = append(resolveOpts, resolverv1.WithSuccessorsOf(installedBundleIdentity{
+			id:  bundlev1.BundleID(installedName),
+			nvr: bundlev1.NameVersionRelease{Version: v},
+		}))
+	}
 
-	results, err := catalog.Resolve(db, oURL.PackageName, resolveOpts)
+	fmt.Fprintf(cmd.ErrOrStderr(), "orb: resolving package %q (version=%q, channels=%v, catalogLabelSelector=%q, installedName=%q, installedVersion=%q)\n",
+		oURL.PackageName, oURL.Version, oURL.Channels, oURL.CatalogLabelSelector, installedName, installedVersion)
+
+	cat, bundles, err := resolverv1.Resolve(ctx, reader, oURL.PackageName, resolveOpts...)
 	if err != nil {
 		return fmt.Errorf("resolving package: %w", err)
 	}
-	if len(results) == 0 {
+	if cat == nil || len(bundles) == 0 {
 		return fmt.Errorf("no matching bundle found for package %q", oURL.PackageName)
 	}
 
-	// Use the highest-versioned result (results are sorted descending).
-	best := results[0]
-	fmt.Fprintf(cmd.ErrOrStderr(), "orb: resolved bundle %q (version %q)\n", best.Name, best.Version)
+	best := bundles[0]
+	fmt.Fprintf(cmd.ErrOrStderr(), "orb: resolved bundle %q (version %q)\n", best.ID(), best.NameVersionRelease().Version)
 
 	// 4. Read the bundle from the resolved image.
-	srcRef, err := transport.ParseRef("docker://" + best.Image)
+	srcRef, err := transport.ParseRef("docker://" + best.URI())
 	if err != nil {
 		return fmt.Errorf("parsing image reference: %w", err)
 	}
