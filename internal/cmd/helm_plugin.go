@@ -323,7 +323,9 @@ func runHelmPluginOrbGetter(cmd *cobra.Command, rawURL string) error {
 	}
 	defer store.Close()
 
-	var resolveOpts []resolverv1.ResolveOption
+	resolveOpts := []resolverv1.ResolveOption{
+		resolverv1.PreferNonDeprecatedBundles(),
+	}
 	var reader catalogv1.StoreReader = store
 
 	if oURL.CatalogLabelSelector != "" {

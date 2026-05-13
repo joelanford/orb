@@ -263,6 +263,12 @@ func runCatalogInfo(cmd *cobra.Command, packageName string, opts *catalogInfoOpt
 			}
 		}
 
+		type deprecationEntry struct {
+			label   string
+			message string
+		}
+		var deprecations []deprecationEntry
+
 		composite, ok := pkg.(catalogv1.CompositeUpdateGraph)
 		if ok {
 			var channelNames []string
@@ -271,6 +277,12 @@ func runCatalogInfo(cmd *cobra.Command, packageName string, opts *catalogInfoOpt
 					return err
 				}
 				channelNames = append(channelNames, ch.Name())
+				if d, ok := ch.(catalogv1.Deprecated); ok {
+					deprecations = append(deprecations, deprecationEntry{
+						label:   fmt.Sprintf("Channel %s", ch.Name()),
+						message: d.DeprecationMessage(),
+					})
+				}
 			}
 			if len(channelNames) > 0 {
 				slices.Sort(channelNames)
@@ -288,11 +300,30 @@ func runCatalogInfo(cmd *cobra.Command, packageName string, opts *catalogInfoOpt
 			if highest == nil || b.NameVersionRelease().VersionRelease().Compare(highest.NameVersionRelease().VersionRelease()) > 0 {
 				highest = b
 			}
+			if d, ok := b.(catalogv1.Deprecated); ok {
+				deprecations = append(deprecations, deprecationEntry{
+					label:   fmt.Sprintf("Bundle %s", b.ID()),
+					message: d.DeprecationMessage(),
+				})
+			}
 		}
 		if bundleCount > 0 {
 			nvr := highest.NameVersionRelease()
 			vr := nvr.VersionRelease()
 			fmt.Fprintf(out, "%s %d (latest: %s)\n", bold.Render("Versions:"), bundleCount, formatVersionRelease(vr))
+		}
+
+		if d, ok := pkg.(catalogv1.Deprecated); ok {
+			deprecations = append([]deprecationEntry{{
+				label:   "Package",
+				message: d.DeprecationMessage(),
+			}}, deprecations...)
+		}
+		if len(deprecations) > 0 {
+			fmt.Fprintf(out, "%s\n", bold.Render("Deprecations:"))
+			for _, entry := range deprecations {
+				fmt.Fprintf(out, "  %s: %s\n", entry.label, entry.message)
+			}
 		}
 
 		return nil
@@ -302,7 +333,8 @@ func runCatalogInfo(cmd *cobra.Command, packageName string, opts *catalogInfoOpt
 }
 
 type catalogSearchOptions struct {
-	includeShadowed bool
+	includeShadowed   bool
+	includeDeprecated bool
 }
 
 func newCatalogSearchCmd() *cobra.Command {
@@ -316,14 +348,16 @@ when no keyword is given.
 
 The keyword is matched (case-insensitive) against the package name, display name,
 description, and keyword entries. By default, only the highest-priority entry for
-each package is shown. Use --include-shadowed to also show lower-priority duplicates,
-which are marked with * and dimmed.
+each package is shown and deprecated packages are hidden. Use --include-shadowed
+to also show lower-priority duplicates (marked with * and dimmed), and
+--include-deprecated to show deprecated packages (marked with † and dimmed).
 
 Examples:
   orb catalog search
   orb catalog search vault
   orb catalog search security
-  orb catalog search --include-shadowed`,
+  orb catalog search --include-shadowed
+  orb catalog search --include-deprecated`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var keyword string
@@ -335,6 +369,7 @@ Examples:
 	}
 
 	cmd.Flags().BoolVar(&opts.includeShadowed, "include-shadowed", false, "Include lower-priority duplicates shadowed by higher-priority catalogs")
+	cmd.Flags().BoolVar(&opts.includeDeprecated, "include-deprecated", false, "Include deprecated packages (marked with †)")
 
 	return cmd
 }
@@ -358,6 +393,7 @@ func runCatalogSearch(cmd *cobra.Command, keyword string, opts *catalogSearchOpt
 		packageName string
 		displayName string
 		shadowed    bool
+		deprecated  bool
 	}
 
 	seen := make(map[string]struct{})
@@ -387,6 +423,11 @@ func runCatalogSearch(cmd *cobra.Command, keyword string, opts *catalogSearchOpt
 				continue
 			}
 
+			_, pkgDeprecated := pkg.(catalogv1.Deprecated)
+			if pkgDeprecated && !opts.includeDeprecated {
+				continue
+			}
+
 			_, shadowed := seen[pkg.Name()]
 			seen[pkg.Name()] = struct{}{}
 			if shadowed && !opts.includeShadowed {
@@ -397,6 +438,7 @@ func runCatalogSearch(cmd *cobra.Command, keyword string, opts *catalogSearchOpt
 				packageName: pkg.Name(),
 				displayName: displayName,
 				shadowed:    shadowed,
+				deprecated:  pkgDeprecated,
 			})
 		}
 	}
@@ -417,16 +459,23 @@ func runCatalogSearch(cmd *cobra.Command, keyword string, opts *catalogSearchOpt
 	out := cmd.OutOrStdout()
 
 	hasShadowed := false
-	shadowedRows := make(map[int]bool)
+	hasDeprecated := false
+	dimmedRows := make(map[int]bool)
 	var rows [][]string
 	for i, r := range results {
+		pkgName := r.packageName
 		catName := r.catalogName
 		if r.shadowed {
 			catName += "*"
 			hasShadowed = true
-			shadowedRows[i] = true
+			dimmedRows[i] = true
 		}
-		rows = append(rows, []string{r.packageName, r.displayName, catName})
+		if r.deprecated {
+			pkgName += "†"
+			hasDeprecated = true
+			dimmedRows[i] = true
+		}
+		rows = append(rows, []string{pkgName, r.displayName, catName})
 	}
 
 	baseStyle := lipgloss.NewStyle().PaddingRight(2)
@@ -440,15 +489,22 @@ func runCatalogSearch(cmd *cobra.Command, keyword string, opts *catalogSearchOpt
 		BorderHeader(false).
 		BorderColumn(false).
 		StyleFunc(func(row, col int) lipgloss.Style {
-			if row >= 0 && shadowedRows[row] {
+			if row >= 0 && dimmedRows[row] {
 				return baseStyle.Faint(true)
 			}
 			return baseStyle
 		})
 
 	fmt.Fprintln(out, t.Render())
+	var legend []string
 	if hasShadowed {
-		fmt.Fprintf(out, "\n* = shadowed by a higher-priority catalog\n")
+		legend = append(legend, "* = shadowed by a higher-priority catalog")
+	}
+	if hasDeprecated {
+		legend = append(legend, "† = deprecated")
+	}
+	if len(legend) > 0 {
+		fmt.Fprintf(out, "\n%s\n", strings.Join(legend, "\n"))
 	}
 	return nil
 }
@@ -869,6 +925,7 @@ type catalogResolveOptions struct {
 	version              string
 	installed            string
 	output               string
+	includeDeprecated    bool
 }
 
 func newCatalogResolveCmd() *cobra.Command {
@@ -881,7 +938,10 @@ func newCatalogResolveCmd() *cobra.Command {
 
 Catalogs are searched in priority order (highest first). The first catalog
 that contains the package is used for resolution. All matching bundles are
-returned, sorted by version descending.
+returned, sorted by version descending. Non-deprecated bundles are preferred
+over deprecated ones. Deprecated bundles are hidden by default; use
+--include-deprecated to show them (marked with † and dimmed in table output,
+with "deprecated" and "deprecationMessage" fields in JSON/YAML output).
 
 Output formats:
   (default)                  Table
@@ -897,7 +957,8 @@ Examples:
   orb catalog resolve vault --installed vault-operator.v0.4.10=0.4.10
   orb catalog resolve vault -o json
   orb catalog resolve vault -o yaml
-  orb catalog resolve vault -o jsonpath='{.items[0].image}'`,
+  orb catalog resolve vault -o jsonpath='{.items[0].image}'
+  orb catalog resolve vault --include-deprecated`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCatalogResolve(cmd, args[0], opts)
@@ -909,6 +970,7 @@ Examples:
 	cmd.Flags().StringVar(&opts.version, "version", "", "Semver version constraint (e.g. ^1.0, >=1.0.0)")
 	cmd.Flags().StringVar(&opts.installed, "installed", "", "Installed bundle name=version for successor resolution (e.g. vault-operator.v0.4.10=0.4.10)")
 	cmd.Flags().StringVarP(&opts.output, "output", "o", "", "Output format: json, yaml, or jsonpath=TEMPLATE")
+	cmd.Flags().BoolVar(&opts.includeDeprecated, "include-deprecated", false, "Include deprecated bundles (marked with † in table output)")
 
 	return cmd
 }
@@ -975,7 +1037,7 @@ func runCatalogResolve(cmd *cobra.Command, packageName string, opts *catalogReso
 		return fmt.Errorf("package %q not found in any catalog", packageName)
 	}
 
-	return printResolveResults(cmd.OutOrStdout(), result.Catalog, result.Bundles, opts.output)
+	return printResolveResults(cmd.OutOrStdout(), result.Catalog, result.Bundles, opts.output, opts.includeDeprecated)
 }
 
 type installedBundleIdentity struct {
@@ -999,9 +1061,9 @@ type resolveOutput struct {
 	Items []resolveResultItem `json:"items"`
 }
 
-func printResolveResults(out io.Writer, cat catalogv1.Catalog, bundles []bundlev1.Bundle, format string) error {
-	items := make([]resolveResultItem, len(bundles))
-	for i, b := range bundles {
+func printResolveResults(out io.Writer, cat catalogv1.Catalog, bundles []bundlev1.Bundle, format string, includeDeprecated bool) error {
+	var items []resolveResultItem
+	for _, b := range bundles {
 		nvr := b.NameVersionRelease()
 		item := resolveResultItem{
 			Catalog: cat.Name(),
@@ -1010,10 +1072,13 @@ func printResolveResults(out io.Writer, cat catalogv1.Catalog, bundles []bundlev
 			Image:   b.URI(),
 		}
 		if d, ok := b.(catalogv1.Deprecated); ok {
+			if !includeDeprecated {
+				continue
+			}
 			item.Deprecated = true
 			item.DeprecationMessage = d.DeprecationMessage()
 		}
-		items[i] = item
+		items = append(items, item)
 	}
 	output := resolveOutput{Items: items}
 
@@ -1050,16 +1115,21 @@ func printResolveResults(out io.Writer, cat catalogv1.Catalog, bundles []bundlev
 		_, err = fmt.Fprintln(out, buf.String())
 		return err
 	case format == "":
+		hasDeprecated := false
+		dimmedRows := make(map[int]bool)
 		var rows [][]string
-		for _, item := range items {
-			depr := ""
+		for i, item := range items {
+			version := item.Version
 			if item.Deprecated {
-				depr = "Yes"
+				version += "†"
+				hasDeprecated = true
+				dimmedRows[i] = true
 			}
-			rows = append(rows, []string{item.Catalog, item.Version, item.Image, depr})
+			rows = append(rows, []string{item.Catalog, version, item.Image})
 		}
+		baseStyle := lipgloss.NewStyle().PaddingRight(2)
 		t := table.New().
-			Headers("CATALOG", "VERSION", "IMAGE", "DEPRECATED").
+			Headers("CATALOG", "VERSION", "IMAGE").
 			Rows(rows...).
 			BorderTop(false).
 			BorderBottom(false).
@@ -1068,9 +1138,15 @@ func printResolveResults(out io.Writer, cat catalogv1.Catalog, bundles []bundlev
 			BorderHeader(false).
 			BorderColumn(false).
 			StyleFunc(func(row, col int) lipgloss.Style {
-				return lipgloss.NewStyle().PaddingRight(2)
+				if row >= 0 && dimmedRows[row] {
+					return baseStyle.Faint(true)
+				}
+				return baseStyle
 			})
 		fmt.Fprintln(out, t.Render())
+		if hasDeprecated {
+			fmt.Fprintf(out, "\n† = deprecated\n")
+		}
 		return nil
 	default:
 		return fmt.Errorf("unsupported output format %q: use json, yaml, or jsonpath=TEMPLATE", format)
