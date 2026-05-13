@@ -361,15 +361,15 @@ func runHelmPluginOrbGetter(cmd *cobra.Command, rawURL string) error {
 	fmt.Fprintf(cmd.ErrOrStderr(), "orb: resolving package %q (version=%q, channels=%v, catalogLabelSelector=%q, installedName=%q, installedVersion=%q)\n",
 		oURL.PackageName, oURL.Version, oURL.Channels, oURL.CatalogLabelSelector, installedName, installedVersion)
 
-	cat, bundles, err := resolverv1.Resolve(ctx, reader, oURL.PackageName, resolveOpts...)
+	result, err := resolverv1.Resolve(ctx, reader, oURL.PackageName, resolveOpts...)
 	if err != nil {
 		return fmt.Errorf("resolving package: %w", err)
 	}
-	if cat == nil || len(bundles) == 0 {
+	if result == nil || len(result.Bundles) == 0 {
 		return fmt.Errorf("no matching bundle found for package %q", oURL.PackageName)
 	}
 
-	best := bundles[0]
+	best := result.Bundles[0]
 	fmt.Fprintf(cmd.ErrOrStderr(), "orb: resolved bundle %q (version %q)\n", best.ID(), best.NameVersionRelease().Version)
 
 	// 4. Read the bundle from the resolved image.
