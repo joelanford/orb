@@ -6,7 +6,7 @@ import (
 	"iter"
 	"testing"
 
-	"github.com/joelanford/library-olm/catalog/fbc"
+	"github.com/joelanford/library-olm/catalog/v1/fbc"
 	"github.com/operator-framework/operator-registry/alpha/declcfg"
 	"github.com/operator-framework/operator-registry/alpha/property"
 	"github.com/stretchr/testify/assert"

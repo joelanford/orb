@@ -8,7 +8,7 @@ import (
 
 	bsemver "github.com/blang/semver/v4"
 	bundlev1 "github.com/joelanford/library-olm/bundle/v1"
-	"github.com/joelanford/library-olm/catalog/fbc"
+	"github.com/joelanford/library-olm/catalog/v1/fbc"
 	"github.com/operator-framework/operator-registry/alpha/declcfg"
 	"github.com/operator-framework/operator-registry/alpha/property"
 )

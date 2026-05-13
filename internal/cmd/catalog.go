@@ -18,8 +18,9 @@ import (
 	mmsemver "github.com/Masterminds/semver/v3"
 	bsemver "github.com/blang/semver/v4"
 	bundlev1 "github.com/joelanford/library-olm/bundle/v1"
-	"github.com/joelanford/library-olm/catalog/fbc"
 	catalogv1 "github.com/joelanford/library-olm/catalog/v1"
+	"github.com/joelanford/library-olm/catalog/v1/fbc"
+	"github.com/joelanford/library-olm/catalog/v1/sqlite"
 	"github.com/joelanford/library-olm/image"
 	imagecatalog "github.com/joelanford/library-olm/image/catalog"
 	resolverv1 "github.com/joelanford/library-olm/resolver/v1"
@@ -64,7 +65,7 @@ func openStore() (catalogv1.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return catalogv1.OpenStore(path)
+	return sqlite.OpenStore(path)
 }
 
 func newFBCImporter(fsys fs.FS) *fbc.Importer {
