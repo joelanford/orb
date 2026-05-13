@@ -931,7 +931,9 @@ func runCatalogResolve(cmd *cobra.Command, packageName string, opts *catalogReso
 		reader = store.Select(selector)
 	}
 
-	var resolveOpts []resolverv1.ResolveOption
+	resolveOpts := []resolverv1.ResolveOption{
+		resolverv1.PreferNonDeprecatedBundles(),
+	}
 
 	if len(opts.channels) > 0 {
 		paths := make([][]string, len(opts.channels))
@@ -965,15 +967,15 @@ func runCatalogResolve(cmd *cobra.Command, packageName string, opts *catalogReso
 		resolveOpts = append(resolveOpts, resolverv1.WithSuccessorsOf(identity))
 	}
 
-	cat, bundles, err := resolverv1.Resolve(ctx, reader, packageName, resolveOpts...)
+	result, err := resolverv1.Resolve(ctx, reader, packageName, resolveOpts...)
 	if err != nil {
 		return err
 	}
-	if cat == nil {
+	if result == nil {
 		return fmt.Errorf("package %q not found in any catalog", packageName)
 	}
 
-	return printResolveResults(cmd.OutOrStdout(), cat, bundles, opts.output)
+	return printResolveResults(cmd.OutOrStdout(), result.Catalog, result.Bundles, opts.output)
 }
 
 type installedBundleIdentity struct {
@@ -985,10 +987,12 @@ func (i installedBundleIdentity) ID() bundlev1.BundleID                         
 func (i installedBundleIdentity) NameVersionRelease() bundlev1.NameVersionRelease { return i.nvr }
 
 type resolveResultItem struct {
-	Catalog string `json:"catalog"`
-	Bundle  string `json:"bundle"`
-	Version string `json:"version"`
-	Image   string `json:"image"`
+	Catalog            string `json:"catalog"`
+	Bundle             string `json:"bundle"`
+	Version            string `json:"version"`
+	Image              string `json:"image"`
+	Deprecated         bool   `json:"deprecated"`
+	DeprecationMessage string `json:"deprecationMessage,omitempty"`
 }
 
 type resolveOutput struct {
@@ -999,12 +1003,17 @@ func printResolveResults(out io.Writer, cat catalogv1.Catalog, bundles []bundlev
 	items := make([]resolveResultItem, len(bundles))
 	for i, b := range bundles {
 		nvr := b.NameVersionRelease()
-		items[i] = resolveResultItem{
+		item := resolveResultItem{
 			Catalog: cat.Name(),
 			Bundle:  string(b.ID()),
 			Version: formatVersionRelease(nvr.VersionRelease()),
 			Image:   b.URI(),
 		}
+		if d, ok := b.(catalogv1.Deprecated); ok {
+			item.Deprecated = true
+			item.DeprecationMessage = d.DeprecationMessage()
+		}
+		items[i] = item
 	}
 	output := resolveOutput{Items: items}
 
@@ -1043,10 +1052,14 @@ func printResolveResults(out io.Writer, cat catalogv1.Catalog, bundles []bundlev
 	case format == "":
 		var rows [][]string
 		for _, item := range items {
-			rows = append(rows, []string{item.Catalog, item.Version, item.Image})
+			depr := ""
+			if item.Deprecated {
+				depr = "Yes"
+			}
+			rows = append(rows, []string{item.Catalog, item.Version, item.Image, depr})
 		}
 		t := table.New().
-			Headers("CATALOG", "VERSION", "IMAGE").
+			Headers("CATALOG", "VERSION", "IMAGE", "DEPRECATED").
 			Rows(rows...).
 			BorderTop(false).
 			BorderBottom(false).
