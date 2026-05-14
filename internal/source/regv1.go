@@ -166,7 +166,7 @@ func untar(r io.Reader, dest string) error {
 }
 
 func readFromImage(ctx context.Context, imgRef types.ImageReference, sysCtx *types.SystemContext) (*registryv1.Bundle, error) {
-	client, err := image.NewContainersImageRepository(ctx, imgRef, sysCtx)
+	client, err := image.NewContainersImageRepository(ctx, imgRef, sysCtx, image.WithSignatureVerification(image.VerifyIfPresent))
 	if err != nil {
 		return nil, fmt.Errorf("creating image repository: %w", err)
 	}

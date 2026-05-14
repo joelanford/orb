@@ -1180,7 +1180,7 @@ func newDockerRepo(ctx context.Context, ref string) (*orbimage.Repository, error
 		return nil, fmt.Errorf("parsing docker reference: %w", err)
 	}
 
-	client, err := image.NewContainersImageRepository(ctx, imgRef, &types.SystemContext{})
+	client, err := image.NewContainersImageRepository(ctx, imgRef, &types.SystemContext{}, image.WithSignatureVerification(image.VerifyIfPresent))
 	if err != nil {
 		return nil, fmt.Errorf("creating image repository: %w", err)
 	}
