@@ -5,6 +5,8 @@ builds:
     binary: orb
     env:
       - CGO_ENABLED=0
+    tags:
+      - "{{ .Env.GO_BUILD_TAGS }}"
     goos:
       - linux
       - darwin
