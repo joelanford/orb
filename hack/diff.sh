@@ -9,9 +9,9 @@ if [ -d .jj ]; then
     jj new --quiet
     trap 'jj abandon --quiet; jj edit "$orig" --quiet' EXIT
     make "$@"
-    diff=$(jj diff)
+    diff=$(jj diff --summary)
     if [ -n "$diff" ]; then
-        echo "$diff"
+        jj diff --git
         exit 1
     fi
 else
