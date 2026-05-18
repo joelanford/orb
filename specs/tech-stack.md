@@ -42,7 +42,7 @@ internal/
   helm/                  # Helm chart generation and packaging
   progress/              # Download progress tracking (wraps library-olm image.Repository)
   source/                # Registry+v1 bundle source loading
-  termimage/             # Terminal image rendering (SVG/raster)
+  termimage/             # Terminal image rendering (kitty graphics protocol, half-block fallback, SVG rasterization)
   transport/             # Transport prefix parsing (docker://, oci:, dir:, etc.)
 helm-plugins/            # Helm plugin definitions (orb-getter)
 hack/                    # Helper scripts (diff.sh)

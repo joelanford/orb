@@ -14,6 +14,7 @@ Key packages:
 - `internal/helm/` — Helm chart generation and packaging
 - `internal/source/` — registry+v1 bundle source loading
 - `internal/progress/` — download progress tracking (wraps library-olm image.Repository)
+- `internal/termimage/` — terminal image rendering (kitty graphics protocol, half-block fallback, SVG rasterization)
 - `internal/transport/` — transport prefix parsing (docker://, oci:, dir:, etc.)
 
 ## Design Principles
