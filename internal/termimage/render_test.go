@@ -15,6 +15,7 @@ import (
 )
 
 func TestRender_PNG(t *testing.T) {
+	forceBackend(t, backendHalfBlock)
 	imgData := encodePNG(t, 4, 4, color.NRGBA{R: 255, G: 0, B: 0, A: 255})
 
 	var buf bytes.Buffer
@@ -28,6 +29,7 @@ func TestRender_PNG(t *testing.T) {
 }
 
 func TestRender_JPEG(t *testing.T) {
+	forceBackend(t, backendHalfBlock)
 	// Create a JPEG image.
 	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
 	for y := range 4 {
@@ -45,6 +47,7 @@ func TestRender_JPEG(t *testing.T) {
 }
 
 func TestRender_InvalidData(t *testing.T) {
+	forceBackend(t, backendHalfBlock)
 	var buf bytes.Buffer
 	err := Render(&buf, []byte("not an image"), "", 20)
 	assert.Error(t, err)
@@ -52,6 +55,7 @@ func TestRender_InvalidData(t *testing.T) {
 }
 
 func TestRender_Scaling(t *testing.T) {
+	forceBackend(t, backendHalfBlock)
 	// 40x40 image should be scaled down to 20 columns.
 	imgData := encodePNG(t, 40, 40, color.NRGBA{R: 0, G: 255, B: 0, A: 255})
 
@@ -68,6 +72,7 @@ func TestRender_Scaling(t *testing.T) {
 }
 
 func TestRender_NoUpscale(t *testing.T) {
+	forceBackend(t, backendHalfBlock)
 	// 4x4 image with maxWidth=20 should NOT upscale.
 	imgData := encodePNG(t, 4, 4, color.NRGBA{R: 128, G: 128, B: 128, A: 255})
 
@@ -83,6 +88,7 @@ func TestRender_NoUpscale(t *testing.T) {
 }
 
 func TestRender_OddHeight(t *testing.T) {
+	forceBackend(t, backendHalfBlock)
 	// 4x3 image: last row should pair the 3rd pixel row with white.
 	imgData := encodePNG(t, 4, 3, color.NRGBA{R: 255, G: 0, B: 0, A: 255})
 
@@ -95,6 +101,7 @@ func TestRender_OddHeight(t *testing.T) {
 }
 
 func TestRender_Transparency(t *testing.T) {
+	forceBackend(t, backendHalfBlock)
 	// Fully transparent pixel should blend to white.
 	imgData := encodePNG(t, 2, 2, color.NRGBA{R: 255, G: 0, B: 0, A: 0})
 
@@ -107,6 +114,7 @@ func TestRender_Transparency(t *testing.T) {
 }
 
 func TestRender_SVG(t *testing.T) {
+	forceBackend(t, backendHalfBlock)
 	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
 		<rect width="20" height="20" fill="red"/>
 		<circle cx="10" cy="10" r="5" fill="blue"/>
@@ -122,6 +130,7 @@ func TestRender_SVG(t *testing.T) {
 }
 
 func TestRender_SVG_UnsupportedElement(t *testing.T) {
+	forceBackend(t, backendHalfBlock)
 	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
 		<foreignObject width="20" height="20"/>
 	</svg>`)
@@ -129,6 +138,30 @@ func TestRender_SVG_UnsupportedElement(t *testing.T) {
 	var buf bytes.Buffer
 	err := Render(&buf, svg, "image/svg+xml", 20)
 	assert.Error(t, err, "strict mode should reject unsupported SVG elements")
+}
+
+func TestRender_NonTTY(t *testing.T) {
+	forceBackend(t, backendNone)
+	imgData := encodePNG(t, 4, 4, color.NRGBA{R: 255, G: 0, B: 0, A: 255})
+
+	var buf bytes.Buffer
+	err := Render(&buf, imgData, "image/png", 20)
+	require.NoError(t, err)
+	assert.Empty(t, buf.String(), "non-TTY writer should produce no output")
+}
+
+func TestRender_KittyBackend(t *testing.T) {
+	forceBackend(t, backendKitty)
+	imgData := encodePNG(t, 4, 4, color.NRGBA{R: 255, G: 0, B: 0, A: 255})
+
+	var buf bytes.Buffer
+	err := Render(&buf, imgData, "image/png", 20)
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "\033_G", "kitty backend should produce kitty escape sequences")
+	assert.Contains(t, out, "a=T,f=32", "kitty backend should use raw RGBA format")
+	assert.NotContains(t, out, "▄", "kitty backend should not contain half-block characters")
 }
 
 func TestRasterizeSVG_MatchesPNG(t *testing.T) {

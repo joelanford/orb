@@ -23,10 +23,21 @@ import (
 // ANSI escape sequences to render two vertical pixels per character cell.
 // If mediaType starts with "image/svg", the SVG is rasterized first.
 func Render(w io.Writer, imgData []byte, mediaType string, maxWidth int) error {
+	backend := detectBackend(w)
+	if backend == backendNone {
+		return nil
+	}
+
+	isSVG := strings.HasPrefix(mediaType, "image/svg")
+
 	var img image.Image
-	if strings.HasPrefix(mediaType, "image/svg") {
+	if isSVG {
+		rasterWidth := maxWidth
+		if backend == backendKitty {
+			rasterWidth = kittyMaxPixels
+		}
 		var err error
-		img, err = rasterizeSVG(imgData, maxWidth)
+		img, err = rasterizeSVG(imgData, rasterWidth)
 		if err != nil {
 			return fmt.Errorf("rasterizing SVG: %w", err)
 		}
@@ -37,7 +48,17 @@ func Render(w io.Writer, imgData []byte, mediaType string, maxWidth int) error {
 			return fmt.Errorf("decoding image: %w", err)
 		}
 	}
-	return renderImage(w, img, maxWidth)
+
+	switch backend {
+	case backendKitty:
+		return renderKitty(w, img)
+	default:
+		img = scaleImage(img, maxWidth)
+		if img == nil {
+			return nil
+		}
+		return renderHalfBlock(w, img)
+	}
 }
 
 // rasterizeSVG parses SVG data in strict mode and rasterizes it to an image
@@ -73,8 +94,9 @@ func rasterizeSVG(data []byte, maxWidth int) (image.Image, error) {
 	return rgba, nil
 }
 
-// renderImage writes the half-block pixel representation of img to w.
-func renderImage(w io.Writer, img image.Image, maxWidth int) error {
+// scaleImage scales img to fit within maxWidth using nearest-neighbor
+// sampling, never upscaling. Returns nil if the result would be empty.
+func scaleImage(img image.Image, maxWidth int) image.Image {
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
@@ -83,7 +105,6 @@ func renderImage(w io.Writer, img image.Image, maxWidth int) error {
 		return nil
 	}
 
-	// Scale to fit maxWidth, never upscale.
 	dstW := min(srcW, maxWidth)
 	dstH := srcH * dstW / srcW
 
@@ -91,32 +112,41 @@ func renderImage(w io.Writer, img image.Image, maxWidth int) error {
 		return nil
 	}
 
-	// Detect terminal background color, fall back to white.
-	bgR, bgG, bgB := detectBackground()
+	if dstW == srcW && dstH == srcH {
+		return img
+	}
 
-	// Render using half-block technique: each character cell represents
-	// two vertical pixels. The top pixel uses the background color and
-	// the bottom pixel uses the foreground color of U+2584 (lower half block).
-	for y := 0; y < dstH; y += 2 {
-		for x := 0; x < dstW; x++ {
-			// Map destination pixel to source pixel (nearest-neighbor).
+	scaled := image.NewNRGBA(image.Rect(0, 0, dstW, dstH))
+	for y := range dstH {
+		for x := range dstW {
 			sx := bounds.Min.X + x*srcW/dstW
 			sy := bounds.Min.Y + y*srcH/dstH
+			scaled.Set(x, y, img.At(sx, sy))
+		}
+	}
+	return scaled
+}
 
-			topR, topG, topB := blendAlpha(img.At(sx, sy), bgR, bgG, bgB)
+// renderHalfBlock writes the half-block pixel representation of img to w.
+// The image must already be scaled to the desired dimensions.
+func renderHalfBlock(w io.Writer, img image.Image) error {
+	bounds := img.Bounds()
+	dstW := bounds.Dx()
+	dstH := bounds.Dy()
 
-			// Bottom pixel: may be out of bounds for odd heights.
+	bgR, bgG, bgB := detectBackground()
+
+	for y := 0; y < dstH; y += 2 {
+		for x := 0; x < dstW; x++ {
+			topR, topG, topB := blendAlpha(img.At(bounds.Min.X+x, bounds.Min.Y+y), bgR, bgG, bgB)
+
 			var botR, botG, botB uint8
 			if y+1 < dstH {
-				sy2 := bounds.Min.Y + (y+1)*srcH/dstH
-				botR, botG, botB = blendAlpha(img.At(sx, sy2), bgR, bgG, bgB)
+				botR, botG, botB = blendAlpha(img.At(bounds.Min.X+x, bounds.Min.Y+y+1), bgR, bgG, bgB)
 			} else {
-				// Odd height: bottom half matches terminal background.
 				botR, botG, botB = bgR, bgG, bgB
 			}
 
-			// \033[48;2;R;G;Bm = background (top pixel)
-			// \033[38;2;R;G;Bm = foreground (bottom pixel)
 			if _, err := fmt.Fprintf(w, "\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm\u2584",
 				topR, topG, topB,
 				botR, botG, botB,
@@ -124,7 +154,6 @@ func renderImage(w io.Writer, img image.Image, maxWidth int) error {
 				return err
 			}
 		}
-		// Reset attributes and newline.
 		if _, err := fmt.Fprint(w, "\033[0m\n"); err != nil {
 			return err
 		}
