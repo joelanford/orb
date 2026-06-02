@@ -1,6 +1,6 @@
 module github.com/joelanford/orb
 
-go 1.25.9
+go 1.26.0
 
 require (
 	charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251120230642-dcccabe2cd63
@@ -24,7 +24,7 @@ require (
 	helm.sh/helm/v4 v4.1.3
 	k8s.io/api v0.35.4
 	k8s.io/apiextensions-apiserver v0.35.3
-	k8s.io/apimachinery v0.35.4
+	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v0.35.4
 	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/controller-runtime v0.23.3
@@ -584,7 +584,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260319201613-d00831a3d3e7 // indirect
 	google.golang.org/grpc v1.79.3 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -596,7 +596,7 @@ require (
 	k8s.io/apiserver v0.35.3 // indirect
 	k8s.io/cli-runtime v0.35.1 // indirect
 	k8s.io/component-base v0.35.3 // indirect
-	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
+	k8s.io/kube-openapi v0.0.0-20260317180543-43fb72c5454a // indirect
 	k8s.io/kubectl v0.35.1 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
