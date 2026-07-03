@@ -7,7 +7,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/go-logr/logr v1.4.3
-	github.com/joelanford/library-olm v0.0.0-20260514165041-1ce6c3cf6f56
+	github.com/joelanford/library-olm v0.0.0-20260703143500-ca7c08869761
 	github.com/muesli/termenv v0.16.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
