@@ -375,7 +375,7 @@ func runHelmPluginOrbGetter(cmd *cobra.Command, rawURL string) error {
 	fmt.Fprintf(cmd.ErrOrStderr(), "orb: resolved bundle %q (version %q)\n", best.ID(), best.NameVersionRelease().Version)
 
 	// 4. Read the bundle from the resolved image.
-	srcRef, err := transport.ParseRef("docker://" + best.URI())
+	srcRef, err := transport.ParseRef(best.URI())
 	if err != nil {
 		return fmt.Errorf("parsing image reference: %w", err)
 	}
