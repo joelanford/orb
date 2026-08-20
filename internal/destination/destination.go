@@ -16,7 +16,6 @@ type Destination interface {
 
 // Options holds authentication, TLS, and render settings for destination transports.
 type Options struct {
-	Namespace   string
 	ConvertOpts []registryv1.RenderOption
 }
 

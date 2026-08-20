@@ -94,12 +94,11 @@ Certificate providers (--cert-provider):
   service-ca    Use OpenShift Service CA Operator
 
 Examples:
-  orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators
-  orb bundle convert plain dir:/path/to/bundle -n operators
-  orb bundle convert plain tar:bundle.tar.gz -n operators
-  orb bundle convert plain oci:/path/to/layout:latest dir:/tmp/output -n operators
-  orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators --cert-provider cert-manager
-  orb bundle convert plain docker://quay.io/my/bundle:v1 -n operators -c config.yaml`,
+  orb bundle convert plain docker://quay.io/my/bundle:v1
+  orb bundle convert plain dir:/path/to/bundle
+  orb bundle convert plain tar:bundle.tar.gz
+  orb bundle convert plain oci:/path/to/layout:latest dir:/tmp/output
+  orb bundle convert plain docker://quay.io/my/bundle:v1 -n my-self-managed-ns --cert-provider cert-manager -c config.yaml`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runConvertPlain(cmd, args, plainOpts)
@@ -107,11 +106,9 @@ Examples:
 	}
 
 	flags := cmd.Flags()
-	flags.StringVarP(&plainOpts.namespace, "namespace", "n", "", "Install namespace for rendered manifests (required)")
+	flags.StringVarP(&plainOpts.namespace, "namespace", "n", "", "Existing self-managed install namespace for rendered manifests")
 	flags.StringVarP(&plainOpts.configFile, "config", "c", "", "Bundle configuration file (YAML with watchNamespace field)")
 	flags.StringVar(&plainOpts.certProvider, "cert-provider", "", "Certificate provider: cert-manager, service-ca")
-
-	_ = cmd.MarkFlagRequired("namespace")
 
 	return cmd
 }
@@ -167,6 +164,10 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 	// Build render options
 	var ropts []registryv1.RenderOption
 
+	if plainOpts.namespace != "" {
+		ropts = append(ropts, registryv1.WithSelfManagedInstallNamespace(plainOpts.namespace))
+	}
+
 	// Process config file if provided
 	if plainOpts.configFile != "" {
 		bundleCfg, err := loadConfig(plainOpts.configFile)
@@ -188,7 +189,6 @@ func runConvertPlain(cmd *cobra.Command, args []string, plainOpts *plainOptions)
 	}
 
 	dest, err := destination.NewPlain(destRef, destination.Options{
-		Namespace:   plainOpts.namespace,
 		ConvertOpts: ropts,
 	})
 	if err != nil {
