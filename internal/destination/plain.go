@@ -25,7 +25,7 @@ func (d *plainDir) Write(_ context.Context, b *registryv1.Bundle) error {
 		return fmt.Errorf("destination directory already exists: %s", dir)
 	}
 
-	objs, err := registryv1.ToPlainManifests(*b, d.opts.Namespace, d.opts.ConvertOpts...)
+	objs, err := registryv1.ToPlainManifests(*b, d.opts.ConvertOpts...)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ type plainStdout struct {
 }
 
 func (d *plainStdout) Write(_ context.Context, b *registryv1.Bundle) error {
-	objs, err := registryv1.ToPlainManifests(*b, d.opts.Namespace, d.opts.ConvertOpts...)
+	objs, err := registryv1.ToPlainManifests(*b, d.opts.ConvertOpts...)
 	if err != nil {
 		return err
 	}

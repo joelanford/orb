@@ -69,7 +69,7 @@ func openStore() (catalogv1.Store, error) {
 }
 
 func newFBCImporter(fsys fs.FS) *fbc.Importer {
-	return fbc.NewImporter(fsys, fbc.WithOLMPackageExtension(catalog.DisplayMetadataExtension{}))
+	return fbc.NewFSImporter(fsys, fbc.WithOLMPackageExtension(catalog.DisplayMetadataExtension{}))
 }
 
 type catalogAddOptions struct {

@@ -99,8 +99,7 @@ func TestHelmOCIArchive_Write_NotImplemented(t *testing.T) {
 func TestPlainDir_Write_FailsIfExists(t *testing.T) {
 	dir := t.TempDir()
 	d := &plainDir{
-		ref:  dir,
-		opts: Options{Namespace: "test-ns"},
+		ref: dir,
 	}
 
 	err := d.Write(context.Background(), minimalBundle())
@@ -113,9 +112,6 @@ func TestPlainDir_Write(t *testing.T) {
 	b := minimalBundle()
 	d := &plainDir{
 		ref: dir,
-		opts: Options{
-			Namespace: "test-ns",
-		},
 	}
 
 	err := d.Write(context.Background(), b)
