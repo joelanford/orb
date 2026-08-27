@@ -1,3 +1,8 @@
+---
+name: sdd-quick-item
+description: Quickly capture a work item idea in the backlog.
+---
+
 Quickly capture a work item idea to the backlog.
 
 Dispatch all of the following steps to a sub-agent to avoid polluting the main context. The sub-agent should return only the created file path and a one-line summary.

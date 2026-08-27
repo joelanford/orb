@@ -1,3 +1,8 @@
+---
+name: sdd-review
+description: Review the current branch's changes for correctness and consistency.
+---
+
 Review the current branch's changes for correctness and consistency.
 
 ## Step 1: Identify changes

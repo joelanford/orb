@@ -1,3 +1,8 @@
+---
+name: sdd-ship
+description: Verify, commit, publish, and monitor the current branch's changes.
+---
+
 Finalize and publish the current branch's changes.
 
 ## Phase 1: Verify
