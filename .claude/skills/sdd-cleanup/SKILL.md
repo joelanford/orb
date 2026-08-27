@@ -1,3 +1,8 @@
+---
+name: sdd-cleanup
+description: Clean up completed specs by updating statuses, backfilling PR links, archiving done work, and flagging stale ideas.
+---
+
 Clean up completed specs: update statuses, backfill PR links, archive done work, and flag stale ideas.
 
 ## Step 1: Inventory specs

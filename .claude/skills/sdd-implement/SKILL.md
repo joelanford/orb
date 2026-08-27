@@ -1,3 +1,8 @@
+---
+name: sdd-implement
+description: Implement a work item from its spec.
+---
+
 Implement a work item from its spec.
 
 ## Step 1: Identify the work item
