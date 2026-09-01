@@ -6,7 +6,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.5
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/blang/semver/v4 v4.0.0
-	github.com/go-logr/logr v1.4.3
+	github.com/go-logr/logr v1.4.4
 	github.com/joelanford/library-olm v0.0.0-20260820111244-09a9a02fb2df
 	github.com/muesli/termenv v0.16.0
 	github.com/opencontainers/go-digest v1.0.0
